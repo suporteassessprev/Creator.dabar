@@ -1,12 +1,11 @@
 // ViralPost — Prisma schema v5 (Commercial SaaS)
-// SQLite for local dev. Switch `provider` to "postgresql" for production.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
