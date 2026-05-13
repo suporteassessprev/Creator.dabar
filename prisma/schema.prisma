@@ -1,0 +1,297 @@
+// ViralPost — Prisma schema v5 (Commercial SaaS)
+// SQLite for local dev. Switch `provider` to "postgresql" for production.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth & Users ──────────────────────────────────────────────────────────
+
+model User {
+  id               String   @id @default(cuid())
+  name             String?
+  email            String   @unique
+  password         String
+  role             String   @default("USER")      // "ADMIN" | "USER"
+  emailVerified    Boolean  @default(false)
+  stripeCustomerId String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  carousels           Carousel[]
+  templates           Template[]
+  promptConfigs       PromptConfig[]
+  subscription        Subscription?
+  creditBalance       CreditBalance?
+  creditTransactions  CreditTransaction[]
+  usageLogs           UsageLog[]
+  apiKeys             ApiKey[]
+  emailTokens         EmailToken[]
+  templateSubmissions TemplateSubmission[]
+
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+model EmailToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    // "verify_email" | "reset_password"
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([userId, type])
+}
+
+// ─── Plans & Subscriptions ─────────────────────────────────────────────────
+
+model Plan {
+  id                   String  @id @default(cuid())
+  name                 String  @unique   // "free" | "pro" | "business"
+  displayName          String
+  description          String?
+  priceMonthly         Int     @default(0)   // BRL cents
+  stripePriceId        String?
+  creditsPerMonth      Int     @default(10)  // -1 = unlimited
+  maxCarousels         Int     @default(5)   // per month, -1 = unlimited
+  maxSlidesPerCarousel Int     @default(5)
+  canExportZip         Boolean @default(false)
+  canUseApi            Boolean @default(false)
+  canSubmitTemplates   Boolean @default(false)
+  active               Boolean @default(true)
+  sortOrder            Int     @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([name])
+}
+
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId               String
+  plan                 Plan      @relation(fields: [planId], references: [id])
+  status               String    @default("active") // "active"|"canceled"|"past_due"|"trialing"|"incomplete"
+  stripeSubscriptionId String?   @unique
+  currentPeriodStart   DateTime  @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  trialEnd             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([planId])
+  @@index([stripeSubscriptionId])
+  @@index([status])
+}
+
+// ─── Credits ──────────────────────────────────────────────────────────────
+
+model CreditBalance {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credits     Int      @default(0)
+  periodStart DateTime @default(now())
+  periodEnd   DateTime
+  updatedAt   DateTime @updatedAt
+}
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int      // positive = add, negative = spend
+  balance     Int      // balance after transaction
+  type        String   // "monthly_grant"|"spend_generate"|"spend_image"|"spend_export"|"purchase"|"admin_grant"
+  description String?
+  carouselId  String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+}
+
+// ─── Usage & Analytics ────────────────────────────────────────────────────
+
+model UsageLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action      String   // "generate_text"|"generate_image"|"export_zip"|"api_call"
+  mode        String?  // "creative"|"carousel"
+  topic       String?
+  creditsUsed Int      @default(1)
+  metadata    String?  // JSON
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+// ─── API Keys (Business plan) ─────────────────────────────────────────────
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([keyHash])
+}
+
+// ─── Templates & Marketplace ──────────────────────────────────────────────
+
+model Template {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  mode          String   @default("creative")
+  layout        String   @default("headline-banner")
+  style         String
+  palette       String?
+  format        String   @default("square")
+  active        Boolean  @default(true)
+  published     Boolean  @default(false)
+  previewImage  String?
+  authorId      String?
+  author        User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  submissionId  String?  @unique
+  submission    TemplateSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([authorId])
+  @@index([published, active])
+  @@index([submissionId])
+}
+
+model TemplateSubmission {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  mode         String    @default("creative")
+  layout       String    @default("headline-banner")
+  style        String
+  palette      String?
+  format       String    @default("square")
+  previewImage String?
+  status       String    @default("pending") // "pending"|"approved"|"rejected"
+  reviewNote   String?
+  reviewedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  approvedTemplate Template?
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ─── Prompts ──────────────────────────────────────────────────────────────
+
+model PromptConfig {
+  id        String          @id @default(cuid())
+  name      String
+  type      String
+  content   String
+  active    Boolean         @default(true)
+  version   Int             @default(1)
+  authorId  String?
+  author    User?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  versions  PromptVersion[]
+
+  @@index([authorId])
+  @@index([type, active])
+}
+
+model PromptVersion {
+  id        String       @id @default(cuid())
+  promptId  String
+  prompt    PromptConfig @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  version   Int
+  content   String
+  createdAt DateTime     @default(now())
+
+  @@index([promptId])
+  @@index([promptId, version])
+}
+
+// ─── Carousels ────────────────────────────────────────────────────────────
+
+model Carousel {
+  id        String   @id
+  title     String
+  topic     String
+  mode      String   @default("creative")
+  format    String   @default("square")
+  style     String
+  status    String   @default("draft")
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  slides    Slide[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─── Stripe Webhook Idempotency ───────────────────────────────────────────
+
+model ProcessedWebhookEvent {
+  id          String   @id @default(cuid())
+  eventId     String   @unique   // Stripe event ID (evt_...)
+  type        String              // event type for debugging
+  processedAt DateTime @default(now())
+
+  @@index([eventId])
+}
+
+model Slide {
+  id              String   @id
+  carouselId      String
+  carousel        Carousel @relation(fields: [carouselId], references: [id], onDelete: Cascade)
+  order           Int      @default(0)
+  title           String   @default("")
+  subtitle        String?
+  content         String   @default("")
+  cta             String?
+  imageUrl        String?
+  imagePrompt     String?
+  backgroundColor String   @default("#0f172a")
+  textColor       String   @default("#ffffff")
+  accentColor     String   @default("#0ea5e9")
+  fontFamily      String   @default("Inter")
+  layout          String   @default("headline-banner")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([carouselId, order])
+}

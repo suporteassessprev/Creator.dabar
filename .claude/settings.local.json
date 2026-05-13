@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(node_modules/.bin/next dev *)",
+      "Bash(echo \"PID: $!\")",
+      "Read(//private/tmp/**)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/generator)",
+      "Bash(curl -s -o /dev/null -w \"dashboard: HTTP %{http_code}\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /dev/null -w \"editor: HTTP %{http_code}\\\\n\" http://localhost:3000/editor)",
+      "Bash(curl -s -o /dev/null -w \"settings: HTTP %{http_code}\\\\n\" http://localhost:3000/settings)",
+      "Bash(curl -s \"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyD2WpyEXo4kMKoEa_NdO-CsENLOSj8jcIQ\")",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyD2WpyEXo4kMKoEa_NdO-CsENLOSj8jcIQ -H 'Content-Type: application/json' -d '{\"contents\":[{\"parts\":[{\"text\":\"Responda em uma palavra: capital do Brasil?\"}]}]}')",
+      "Bash(curl -s -X POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=AIzaSyD2WpyEXo4kMKoEa_NdO-CsENLOSj8jcIQ -H 'Content-Type: application/json' -d '{ *)",
+      "Bash(node -e ' *)",
+      "Bash(node_modules/.bin/prisma db *)",
+      "Bash(node_modules/.bin/tsx prisma/seed.ts)",
+      "Bash(curl -s -o /dev/null -w \"/ HTTP %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"/admin \\(sem cookie\\) HTTP %{http_code} -> %{redirect_url}\\\\n\" http://localhost:3000/admin)",
+      "Bash(curl -s -o /dev/null -w \"/admin/login HTTP %{http_code}\\\\n\" http://localhost:3000/admin/login)",
+      "Bash(curl -s -o /dev/null -w \"/dashboard \\(existente\\) HTTP %{http_code}\\\\n\" http://localhost:3000/dashboard)"
+    ]
+  }
+}
