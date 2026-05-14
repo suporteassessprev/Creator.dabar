@@ -40,7 +40,7 @@ function EditorContent() {
   const searchParams = useSearchParams()
   const carouselId = searchParams.get('id')
 
-  const { getCarousel, updateCarousel, geminiApiKey } = useAppStore()
+  const { getCarousel, updateCarousel } = useAppStore()
   const [carousel, setCarousel] = useState<ReturnType<typeof getCarousel>>(undefined)
   const [activeSlideIndex, setActiveSlideIndex] = useState(0)
   const [activeTab, setActiveTab] = useState<'text' | 'style' | 'image' | 'layout'>('text')
@@ -97,13 +97,13 @@ function EditorContent() {
   }
 
   const handleGenerateImage = async () => {
-    if (!geminiApiKey || !activeSlide.imagePrompt) return
+    if (!activeSlide.imagePrompt) return
     setIsGeneratingImage(true)
     try {
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: activeSlide.imagePrompt, apiKey: geminiApiKey }),
+        body: JSON.stringify({ prompt: activeSlide.imagePrompt }),
       })
       if (res.ok) {
         const { imageData } = await res.json()
@@ -423,9 +423,9 @@ function EditorContent() {
 
                     <button
                       onClick={handleGenerateImage}
-                      disabled={isGeneratingImage || !geminiApiKey || !activeSlide.imagePrompt}
+                      disabled={isGeneratingImage || !activeSlide.imagePrompt}
                       className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${
-                        isGeneratingImage || !geminiApiKey || !activeSlide.imagePrompt
+                        isGeneratingImage || !activeSlide.imagePrompt
                           ? 'bg-white/5 text-gray-500 cursor-not-allowed'
                           : 'bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90'
                       }`}

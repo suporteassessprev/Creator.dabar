@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   Save, ChevronLeft, History, RotateCcw, Copy,
   FlaskConical, ChevronDown, ChevronUp, CheckCircle2,
-  AlertCircle, Loader2, Eye, EyeOff,
+  AlertCircle, Loader2,
 } from 'lucide-react'
 
 export type PromptType = 'creative_copy' | 'carousel_copy' | 'creative_image' | 'carousel_image'
@@ -63,8 +63,6 @@ export default function PromptForm({ initial }: Props) {
 
   // Inline test
   const [showTest,   setShowTest]   = useState(false)
-  const [apiKeyTest, setApiKeyTest] = useState('')
-  const [showApiKey, setShowApiKey] = useState(false)
   const [testVars,   setTestVars]   = useState<Record<string, string>>(DEFAULT_TEST_VARS[type])
   const [testing,    setTesting]    = useState(false)
   const [testResult, setTestResult] = useState<{ filled: string; output: string } | null>(null)
@@ -134,7 +132,6 @@ export default function PromptForm({ initial }: Props) {
   }
 
   async function handleTest() {
-    if (!apiKeyTest.trim()) { setTestError('Insira sua API key Gemini para testar'); return }
     setTesting(true)
     setTestError(null)
     setTestResult(null)
@@ -147,7 +144,6 @@ export default function PromptForm({ initial }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          apiKey: apiKeyTest,
           vars:   testVars,
           content, // always use the current editor content
         }),
@@ -291,25 +287,9 @@ export default function PromptForm({ initial }: Props) {
 
             {showTest && (
               <div className="px-5 pb-5 space-y-4 border-t border-white/5">
-                {/* API key */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-400 mb-1.5">API Key Gemini (apenas para teste)</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      value={apiKeyTest}
-                      onChange={e => setApiKeyTest(e.target.value)}
-                      placeholder="AIza…"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 pr-10 text-sm focus:outline-none focus:border-green-500/50"
-                    />
-                    <button
-                      onClick={() => setShowApiKey(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                    >
-                      {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                </div>
+                <p className="text-[11px] text-gray-500 pt-3">
+                  O teste usa a chave Gemini configurada no servidor.
+                </p>
 
                 {/* Vars */}
                 <div>

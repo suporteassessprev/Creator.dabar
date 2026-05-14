@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { fillTemplate } from '@/lib/prompt-service'
+import {
+  getServerGeminiKey,
+  GeminiKeyMissingError,
+  MISSING_GEMINI_KEY_MESSAGE,
+} from '@/lib/gemini'
 
 // POST /api/admin/prompts/test-anonymous
 // Used to test a prompt template that hasn't been saved yet (new prompt form)
@@ -12,8 +17,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { apiKey, vars = {}, content } = await req.json()
-    if (!apiKey)   return NextResponse.json({ error: 'apiKey obrigatório' }, { status: 400 })
+    // SECURITY: never read or honor a client-supplied apiKey.
+    const { vars = {}, content } = await req.json()
     if (!content)  return NextResponse.json({ error: 'content obrigatório' }, { status: 400 })
 
     const filled = fillTemplate(content, {
@@ -24,13 +29,16 @@ export async function POST(req: Request) {
       imagePrompt: vars.imagePrompt ?? 'professional business scene',
     })
 
-    const genAI = new GoogleGenerativeAI(apiKey)
+    const genAI = new GoogleGenerativeAI(getServerGeminiKey())
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     const result = await model.generateContent(filled)
     const output = result.response.text()
 
     return NextResponse.json({ filled, output })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    if (e instanceof GeminiKeyMissingError) {
+      return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
+    }
+    return NextResponse.json({ error: 'Erro ao testar prompt' }, { status: 500 })
   }
 }

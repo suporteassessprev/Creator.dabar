@@ -6,7 +6,7 @@ import { useAppStore } from '@/lib/store'
 import AppLayout from '@/components/AppLayout'
 import CarouselCard from '@/components/CarouselCard'
 import {
-  Plus, Zap, TrendingUp, Layers, Star, ArrowRight,
+  Plus, Zap, TrendingUp, Layers, Star,
   AlertCircle, Sparkles, RefreshCw, Cloud, HardDrive,
 } from 'lucide-react'
 
@@ -61,7 +61,7 @@ function dbToStoreCarousel(d: DBCarousel) {
 }
 
 export default function DashboardPage() {
-  const { carousels: localCarousels, deleteCarousel, addCarousel, geminiApiKey } = useAppStore()
+  const { carousels: localCarousels, deleteCarousel, addCarousel } = useAppStore()
   const [filter, setFilter] = useState<FilterKey>('all')
 
   // DB state
@@ -154,23 +154,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* API Key Warning */}
-        {!geminiApiKey && (
-          <div className="flex items-center gap-3 glass border border-yellow-500/20 rounded-xl p-4 mb-6">
-            <AlertCircle size={20} className="text-yellow-400 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-yellow-400">Conecte sua API Gemini</p>
-              <p className="text-xs text-gray-400">Configure sua chave para começar a gerar carrosséis</p>
-            </div>
-            <Link
-              href="/settings"
-              className="flex-shrink-0 text-xs font-semibold text-yellow-400 hover:text-yellow-300 flex items-center gap-1"
-            >
-              Configurar <ArrowRight size={14} />
-            </Link>
-          </div>
-        )}
-
         {/* DB error banner */}
         {dbError && (
           <div className="flex items-center gap-3 glass border border-orange-500/20 rounded-xl p-4 mb-6">
@@ -255,11 +238,11 @@ export default function DashboardPage() {
             </p>
             {allCarousels.length === 0 && (
               <Link
-                href={geminiApiKey ? '/generator' : '/settings'}
+                href="/generator"
                 className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-xl font-bold hover:opacity-90 transition-all hover:scale-105"
               >
                 <Zap size={20} />
-                {geminiApiKey ? 'Gerar Meu Primeiro Carrossel' : 'Configurar API e Começar'}
+                Gerar Meu Primeiro Carrossel
               </Link>
             )}
           </div>

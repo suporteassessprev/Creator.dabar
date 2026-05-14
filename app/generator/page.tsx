@@ -15,7 +15,7 @@ import {
 } from '@/lib/store'
 import { contentToSlides as buildSlides } from '@/lib/gemini'
 import {
-  Sparkles, Zap, ChevronRight, Loader2,
+  Sparkles, Zap, Loader2,
   AlertCircle, Settings2, Image as ImageIcon, Type,
   LayoutGrid, Megaphone, Square, RectangleVertical, Smartphone,
   ChevronDown, ChevronUp, LayoutTemplate, X,
@@ -117,7 +117,7 @@ function TemplateCard({
 /* ─── Main page ──────────────────────────────────────── */
 export default function GeneratorPage() {
   const router = useRouter()
-  const { geminiApiKey, addCarousel, setCurrentCarousel, setIsGenerating } = useAppStore()
+  const { addCarousel, setCurrentCarousel, setIsGenerating } = useAppStore()
 
   const [mode,           setMode]           = useState<CarouselMode>('creative')
   const [topic,          setTopic]          = useState('')
@@ -172,7 +172,6 @@ export default function GeneratorPage() {
 
   const handleGenerate = async () => {
     if (!topic.trim()) { setError('Digite o tema'); return }
-    if (!geminiApiKey) { setError('Configure sua API Key do Gemini nas configurações'); return }
 
     setError('')
     setIsLoading(true)
@@ -198,7 +197,6 @@ export default function GeneratorPage() {
           slideCount: mode === 'carousel' ? slideCount : 1,
           style, tone,
           targetAudience: audience,
-          apiKey: geminiApiKey,
         }),
       })
 
@@ -238,7 +236,7 @@ export default function GeneratorPage() {
               const imgRes = await fetch('/api/generate-image', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: slide.imagePrompt, apiKey: geminiApiKey }),
+                body: JSON.stringify({ prompt: slide.imagePrompt }),
               })
               if (imgRes.ok) {
                 const { imageData } = await imgRes.json()
@@ -331,19 +329,6 @@ export default function GeneratorPage() {
             </button>
           ))}
         </div>
-
-        {/* API key warning */}
-        {!geminiApiKey && (
-          <div className="flex items-center gap-3 glass border border-yellow-500/30 rounded-xl p-4 mb-6 cursor-pointer hover:border-yellow-500/50 transition-colors"
-            onClick={() => router.push('/settings')}>
-            <AlertCircle size={20} className="text-yellow-400" />
-            <div className="flex-1">
-              <p className="font-semibold text-yellow-400 text-sm">API Key não configurada</p>
-              <p className="text-xs text-gray-400">Clique para configurar sua chave do Gemini</p>
-            </div>
-            <ChevronRight size={16} className="text-yellow-400" />
-          </div>
-        )}
 
         {/* ── Template selector ── */}
         <div className="glass rounded-2xl mb-6 overflow-hidden border border-white/5">

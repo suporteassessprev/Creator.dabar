@@ -9,13 +9,17 @@ import { buildPrompt } from '@/lib/prompt-service'
 import { checkCanGenerate, consumeCredit } from '@/lib/billing'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import bcrypt from 'bcryptjs'
+import {
+  getServerGeminiKey,
+  GeminiKeyMissingError,
+  MISSING_GEMINI_KEY_MESSAGE,
+} from '@/lib/gemini'
 
 async function resolveApiKey(req: NextRequest) {
   const auth = req.headers.get('authorization') ?? ''
   if (!auth.startsWith('Bearer ')) return null
   const rawKey = auth.slice(7).trim()
 
-  // Find active keys whose prefix matches (narrows the bcrypt search)
   const prefix = rawKey.substring(0, 16)
   const candidates = await prisma.apiKey.findMany({
     where:   { keyPrefix: { startsWith: prefix }, revokedAt: null },
@@ -24,7 +28,6 @@ async function resolveApiKey(req: NextRequest) {
 
   for (const k of candidates) {
     if (await bcrypt.compare(rawKey, k.keyHash)) {
-      // Update lastUsedAt (fire-and-forget)
       prisma.apiKey.update({ where: { id: k.id }, data: { lastUsedAt: new Date() } }).catch(() => {})
       return k.user
     }
@@ -39,30 +42,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // SECURITY: Destructure `geminiApiKey` last and never log the full body.
-    // Preferred path: use the server-level GEMINI_API_KEY env var so the client
-    // never needs to send their key. The client-supplied key is a fallback for
-    // developers who haven't configured the server key yet.
-    // TODO (R7): Store the user's Gemini key encrypted in the DB (UserSettings)
-    //            so it doesn't transit the wire on every request.
-    const { mode = 'carousel', topic, slideCount = 5, tone = 'viral', audience, geminiApiKey } = await req.json()
+    // SECURITY: never read or honor a client-supplied geminiApiKey.
+    const { mode = 'carousel', topic, slideCount = 5, tone = 'viral', audience } = await req.json()
 
     if (!topic) return NextResponse.json({ error: 'topic is required' }, { status: 400 })
 
-    // Resolve API key: prefer server env var, fall back to client-supplied key.
-    // The client-supplied key is NEVER logged — only the resolved source is logged.
-    const resolvedGeminiKey = process.env.GEMINI_API_KEY ?? geminiApiKey
-    if (!resolvedGeminiKey) {
-      return NextResponse.json(
-        { error: 'No Gemini API key available. Either set GEMINI_API_KEY on the server or pass geminiApiKey in the request body.' },
-        { status: 400 }
-      )
-    }
-    const keySource = process.env.GEMINI_API_KEY ? 'server-env' : 'client-supplied'
-    // Log source but never the key value
-    console.log(`[api/v1/generate] user=${user.id} keySource=${keySource} mode=${mode}`)
+    // Server-managed Gemini key only. Resolves from env or throws.
+    const geminiKey = getServerGeminiKey()
+    console.log(`[api/v1/generate] user=${user.id} mode=${mode}`)
 
-    // Check plan / credits
     const check = await checkCanGenerate(user.id, 'api_call', slideCount)
     if (!check.allowed) {
       return NextResponse.json({ error: check.reason }, { status: 402 })
@@ -70,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     const audienceStr = audience || 'empreendedores e criadores de conteúdo'
 
-    const genAI = new GoogleGenerativeAI(resolvedGeminiKey)
+    const genAI = new GoogleGenerativeAI(geminiKey)
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
     let result: unknown
@@ -99,8 +87,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, mode, result })
   } catch (e: any) {
-    // Log error without risk of exposing key material from the exception chain
-    console.error('V1 API error:', e?.message ?? String(e))
+    if (e instanceof GeminiKeyMissingError) {
+      console.error('[api/v1/generate] GEMINI_API_KEY missing')
+      return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
+    }
+    // Log only the message — never the full error (may contain key material).
+    console.error('V1 API error:', e?.message ?? 'unknown')
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -3,38 +3,36 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { buildPrompt } from '@/lib/prompt-service'
 import { getSession } from '@/lib/auth'
 import { checkCanGenerate, consumeCredit } from '@/lib/billing'
+import {
+  getServerGeminiKey,
+  GeminiKeyMissingError,
+  MISSING_GEMINI_KEY_MESSAGE,
+} from '@/lib/gemini'
 
-async function generateImage(
-  enhancedPrompt: string,
-  apiKey: string
-): Promise<string | null> {
-  try {
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image' })
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: enhancedPrompt }] }],
-      generationConfig: { responseModalities: ['IMAGE', 'TEXT'] } as any,
-    })
-    for (const part of result.response.candidates?.[0]?.content?.parts || []) {
-      if ((part as any).inlineData?.mimeType?.startsWith('image/')) {
-        const { mimeType, data } = (part as any).inlineData
-        return `data:${mimeType};base64,${data}`
-      }
+async function generateImage(enhancedPrompt: string): Promise<string | null> {
+  const genAI = new GoogleGenerativeAI(getServerGeminiKey())
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image' })
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: enhancedPrompt }] }],
+    generationConfig: { responseModalities: ['IMAGE', 'TEXT'] } as any,
+  })
+  for (const part of result.response.candidates?.[0]?.content?.parts || []) {
+    if ((part as any).inlineData?.mimeType?.startsWith('image/')) {
+      const { mimeType, data } = (part as any).inlineData
+      return `data:${mimeType};base64,${data}`
     }
-    return null
-  } catch (err) {
-    console.error('Image generation error:', err)
-    return null
   }
+  return null
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { prompt, apiKey, mode = 'carousel' } = body
+    // SECURITY: never read or honor a client-supplied apiKey.
+    const { prompt, mode = 'carousel' } = body
 
-    if (!apiKey) {
-      return NextResponse.json({ error: 'API key não fornecida' }, { status: 400 })
+    if (!prompt) {
+      return NextResponse.json({ error: 'prompt é obrigatório' }, { status: 400 })
     }
 
     // ── Plan & credit check ──────────────────────────────────
@@ -49,17 +47,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Use DB-driven prompt template (falls back to hardcoded default)
     const promptType = mode === 'creative' ? 'creative_image' : 'carousel_image'
     const enhancedPrompt = await buildPrompt(promptType, { imagePrompt: prompt })
 
-    const imageData = await generateImage(enhancedPrompt, apiKey)
+    const imageData = await generateImage(enhancedPrompt)
 
     if (!imageData) {
       return NextResponse.json({ error: 'Não foi possível gerar a imagem' }, { status: 500 })
     }
 
-    // Deduct credit + log
     if (session) {
       await consumeCredit(session.userId, 'generate_image', {
         mode,
@@ -69,9 +65,13 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ imageData })
   } catch (error: any) {
-    console.error('Image generation error:', error)
+    if (error instanceof GeminiKeyMissingError) {
+      console.error('[api/generate-image] GEMINI_API_KEY missing')
+      return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
+    }
+    console.error('Image generation error:', error?.message ?? 'unknown')
     return NextResponse.json(
-      { error: error.message || 'Erro ao gerar imagem' },
+      { error: 'Erro ao gerar imagem. Tente novamente.' },
       { status: 500 }
     )
   }

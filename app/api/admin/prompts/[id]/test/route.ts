@@ -3,6 +3,11 @@ import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { fillTemplate } from '@/lib/prompt-service'
+import {
+  getServerGeminiKey,
+  GeminiKeyMissingError,
+  MISSING_GEMINI_KEY_MESSAGE,
+} from '@/lib/gemini'
 
 async function checkAdmin() {
   const session = await getSession()
@@ -11,7 +16,7 @@ async function checkAdmin() {
 }
 
 // POST /api/admin/prompts/[id]/test
-// body: { apiKey, vars: Record<string,string>, content?: string }
+// body: { vars: Record<string,string>, content?: string }
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }
@@ -20,8 +25,8 @@ export async function POST(
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { apiKey, vars = {}, content: overrideContent } = await req.json()
-    if (!apiKey) return NextResponse.json({ error: 'apiKey obrigatório' }, { status: 400 })
+    // SECURITY: never read or honor a client-supplied apiKey.
+    const { vars = {}, content: overrideContent } = await req.json()
 
     let template: string
 
@@ -41,13 +46,16 @@ export async function POST(
       imagePrompt: vars.imagePrompt ?? 'professional business scene',
     })
 
-    const genAI = new GoogleGenerativeAI(apiKey)
+    const genAI = new GoogleGenerativeAI(getServerGeminiKey())
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
     const result = await model.generateContent(filled)
     const output = result.response.text()
 
     return NextResponse.json({ filled, output })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    if (e instanceof GeminiKeyMissingError) {
+      return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
+    }
+    return NextResponse.json({ error: 'Erro ao testar prompt' }, { status: 500 })
   }
 }

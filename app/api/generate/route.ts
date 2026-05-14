@@ -3,9 +3,14 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { buildPrompt } from '@/lib/prompt-service'
 import { getSession } from '@/lib/auth'
 import { checkCanGenerate, consumeCredit } from '@/lib/billing'
+import {
+  getServerGeminiKey,
+  GeminiKeyMissingError,
+  MISSING_GEMINI_KEY_MESSAGE,
+} from '@/lib/gemini'
 
-async function callGemini(apiKey: string, prompt: string): Promise<string> {
-  const genAI = new GoogleGenerativeAI(apiKey)
+async function callGemini(prompt: string): Promise<string> {
+  const genAI = new GoogleGenerativeAI(getServerGeminiKey())
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
   const result = await model.generateContent(prompt)
   return result.response.text()
@@ -20,10 +25,10 @@ function extractJson(text: string): unknown {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { mode, topic, slideCount, tone, targetAudience, apiKey } = body
+    // SECURITY: never read or honor a client-supplied apiKey/geminiApiKey.
+    const { mode, topic, slideCount, tone, targetAudience } = body
 
-    if (!apiKey) return NextResponse.json({ error: 'Chave de API do Gemini não fornecida' }, { status: 400 })
-    if (!topic)  return NextResponse.json({ error: 'Tema é obrigatório' }, { status: 400 })
+    if (!topic) return NextResponse.json({ error: 'Tema é obrigatório' }, { status: 400 })
 
     // ── Plan & credit check ──────────────────────────────────
     const session = await getSession()
@@ -48,12 +53,11 @@ export async function POST(req: NextRequest) {
       const prompt = await buildPrompt('creative_copy', {
         topic, tone: toneStr, audience: audienceStr,
       })
-      const text     = await callGemini(apiKey, prompt)
+      const text     = await callGemini(prompt)
       const creative = extractJson(text) as {
         headline: string; subtitle: string; cta: string; imagePrompt: string
       }
 
-      // Deduct credit + log
       if (session) {
         await consumeCredit(session.userId, 'generate_text', {
           mode: 'creative', topic,
@@ -69,7 +73,7 @@ export async function POST(req: NextRequest) {
       topic, tone: toneStr, audience: audienceStr,
       slideCount: String(slideCount || 7),
     })
-    const text   = await callGemini(apiKey, prompt)
+    const text   = await callGemini(prompt)
     const parsed = extractJson(text) as { title: string; slides: unknown[] }
 
     if (session) {
@@ -82,7 +86,16 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ mode: 'carousel', ...parsed })
   } catch (error: any) {
-    console.error('Generate error:', error)
-    return NextResponse.json({ error: error.message || 'Erro ao gerar conteúdo' }, { status: 500 })
+    if (error instanceof GeminiKeyMissingError) {
+      console.error('[api/generate] GEMINI_API_KEY missing')
+      return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
+    }
+    // Log only the message — avoid serializing full error objects that may
+    // contain request/response payloads with the key.
+    console.error('Generate error:', error?.message ?? 'unknown')
+    return NextResponse.json(
+      { error: 'Erro ao gerar conteúdo. Tente novamente.' },
+      { status: 500 }
+    )
   }
 }
