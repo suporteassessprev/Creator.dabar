@@ -19,6 +19,7 @@ import {
   ImageSlotElement,
   ImageStaticElement,
   AccountBadgeElement,
+  IconElement,
   ShapeElement,
   BackgroundElement,
   TemplateContent,
@@ -26,6 +27,7 @@ import {
   resolveText,
   parseAccentSegments,
 } from '@/lib/template-structure'
+import { getIcon } from '@/lib/template-icons'
 
 interface Props {
   structure: TemplateStructure
@@ -253,6 +255,40 @@ function AccountBadgeNode({ el }: { el: AccountBadgeElement }) {
   )
 }
 
+function IconNode({ el }: { el: IconElement }) {
+  const Icon = getIcon(el.iconName)
+  const hasBackground = !!el.background
+  const containerStyle: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    background: el.background,
+    borderRadius: hasBackground ? `${el.borderRadius ?? 0}px` : undefined,
+    padding: hasBackground
+      ? `${el.paddingY ?? 8}px ${el.paddingX ?? 8}px`
+      : undefined,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: el.color ?? '#ffffff',
+  }
+  if (!Icon) {
+    return (
+      <div style={{ ...containerStyle, color: 'rgba(148, 163, 184, 0.6)', fontSize: '1cqw' }}>
+        ?
+      </div>
+    )
+  }
+  return (
+    <div style={containerStyle}>
+      <Icon
+        size="100%"
+        strokeWidth={el.strokeWidth ?? 2}
+        style={{ width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' }}
+      />
+    </div>
+  )
+}
+
 function ShapeNode({ el }: { el: ShapeElement }) {
   const isCircle = el.shape === 'circle'
   const style: CSSProperties = {
@@ -311,6 +347,9 @@ function ElementNode({
       break
     case 'account_badge':
       node = <AccountBadgeNode el={el} />
+      break
+    case 'icon':
+      node = <IconNode el={el} />
       break
     case 'shape':
       node = <ShapeNode el={el} />

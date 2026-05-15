@@ -22,18 +22,20 @@ import {
   ImageSlotElement,
   ImageStaticElement,
   AccountBadgeElement,
+  IconElement,
   ShapeElement,
   BackgroundElement,
   defaultStructure,
   newId,
   validateStructure,
 } from '@/lib/template-structure'
+import { TEMPLATE_ICONS, CATEGORY_LABELS, searchIcons, type IconCategory } from '@/lib/template-icons'
 import type { LucideIcon } from 'lucide-react'
 import {
   Save, ArrowLeft, Eye, EyeOff, Lock, Unlock, Copy as CopyIcon, Trash2,
   ChevronUp, ChevronDown, Plus, Loader2, AlertCircle, CheckCircle2,
   Type, Image as ImageIcon, Square as SquareIcon,
-  PaintBucket, Tag, Sparkles, X, UserCircle, ImagePlus, Upload,
+  PaintBucket, Tag, Sparkles, X, UserCircle, ImagePlus, Upload, Smile, Search,
 } from 'lucide-react'
 
 /* ─── Form metadata fields (kept for backward compat with old API) ──── */
@@ -58,6 +60,7 @@ const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
   image_slot:     'Imagem (slot IA)',
   image_static:   'Imagem estática',
   account_badge:  'Perfil (@handle)',
+  icon:           'Ícone',
   shape:          'Forma',
   badge:          'Badge',
   background:     'Fundo',
@@ -70,6 +73,7 @@ const ELEMENT_ICONS: Record<ElementType, LucideIcon> = {
   image_slot:     ImageIcon,
   image_static:   ImagePlus,
   account_badge:  UserCircle,
+  icon:           Smile,
   shape:          SquareIcon,
   badge:          Tag,
   background:     PaintBucket,
@@ -132,6 +136,8 @@ function newElement(type: ElementType, zIndex: number): TemplateElement {
       return { ...base, type, src: '', objectFit: 'cover', width: 50, height: 30, x: 25, y: 35, borderRadius: 12, alt: '' }
     case 'account_badge':
       return { ...base, type, handle: '@seu_perfil', avatarSize: 36, fontSize: 22, fontWeight: 600, color: '#111111', width: 40, height: 5, x: 5, y: 5 }
+    case 'icon':
+      return { ...base, type, iconName: 'CheckCircle2', color: '#ffffff', strokeWidth: 2, width: 8, height: 8, x: 46, y: 46 }
     case 'shape':
       return { ...base, type, shape: 'rectangle', fill: 'rgba(14, 165, 233, 0.3)', borderRadius: 8 }
     case 'background':
@@ -464,7 +470,7 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
             Adicionar
           </div>
           <div className="grid grid-cols-2 gap-1">
-            {(['text_headline','text_subtitle','text_cta','image_slot','image_static','account_badge','shape','badge','background'] as ElementType[]).map(t => {
+            {(['text_headline','text_subtitle','text_cta','image_slot','image_static','account_badge','icon','shape','badge','background'] as ElementType[]).map(t => {
               const Icon = ELEMENT_ICONS[t]
               return (
                 <button
@@ -578,6 +584,9 @@ function PropertiesPanel(props: {
       )}
       {el.type === 'account_badge' && (
         <AccountBadgePropsPanel el={el as AccountBadgeElement} onChange={onChange} />
+      )}
+      {el.type === 'icon' && (
+        <IconPropsPanel el={el as IconElement} onChange={onChange} />
       )}
       {el.type === 'shape' && (
         <ShapePropsPanel el={el as ShapeElement} onChange={onChange} />
@@ -1069,6 +1078,119 @@ function AccountBadgePropsPanel({
         </div>
         <ColorField label="Cor do handle" value={el.color ?? '#111111'} onChange={v => onChange({ color: v })} />
       </Section>
+    </>
+  )
+}
+
+/**
+ * Properties panel for icon elements. Picker with category filter + search.
+ * Below the picker: color, stroke width, optional background pill.
+ */
+function IconPropsPanel({
+  el, onChange,
+}: {
+  el: IconElement
+  onChange: (p: Partial<IconElement>) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [cat,   setCat]   = useState<IconCategory | 'all'>('all')
+
+  const filtered = useMemo(() => {
+    let names = searchIcons(query)
+    if (cat !== 'all') names = names.filter(n => TEMPLATE_ICONS[n].category === cat)
+    return names
+  }, [query, cat])
+
+  return (
+    <>
+      <Section title="Ícone selecionado">
+        <div className="flex items-center gap-2 glass rounded-lg p-2">
+          {(() => {
+            const meta = TEMPLATE_ICONS[el.iconName]
+            if (!meta) return <span className="text-[11px] text-yellow-400">Ícone desconhecido: {el.iconName}</span>
+            const Icon = meta.Icon
+            return (
+              <>
+                <div
+                  className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+                  style={{ background: el.background, color: el.color ?? '#ffffff', border: el.background ? undefined : '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  <Icon size={18} strokeWidth={el.strokeWidth ?? 2} />
+                </div>
+                <code className="text-[11px] text-purple-300">{el.iconName}</code>
+                <span className="ml-auto text-[10px] text-gray-500">{CATEGORY_LABELS[meta.category]}</span>
+              </>
+            )
+          })()}
+        </div>
+      </Section>
+
+      <Section title="Buscar ícones">
+        <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-md px-2">
+          <Search size={11} className="text-gray-400" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Buscar (check, seta, $...)"
+            className="flex-1 bg-transparent py-1 text-[11px] focus:outline-none"
+          />
+        </div>
+        <select
+          value={cat}
+          onChange={e => setCat(e.target.value as IconCategory | 'all')}
+          className="w-full bg-white/5 border border-white/10 rounded-md px-2 py-1 text-[11px] focus:outline-none focus:border-blue-500/50"
+        >
+          <option value="all">Todas categorias</option>
+          {(Object.keys(CATEGORY_LABELS) as IconCategory[]).map(c => (
+            <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+          ))}
+        </select>
+
+        <div className="grid grid-cols-6 gap-1 max-h-48 overflow-y-auto p-1 bg-black/20 rounded-md">
+          {filtered.map(name => {
+            const Icon = TEMPLATE_ICONS[name].Icon
+            const isSel = name === el.iconName
+            return (
+              <button
+                key={name}
+                onClick={() => onChange({ iconName: name })}
+                title={name}
+                className={`aspect-square flex items-center justify-center rounded transition-all ${
+                  isSel
+                    ? 'bg-blue-500/30 border border-blue-500/60'
+                    : 'hover:bg-white/10 border border-transparent'
+                }`}
+                type="button"
+              >
+                <Icon size={14} />
+              </button>
+            )
+          })}
+          {filtered.length === 0 && (
+            <div className="col-span-6 text-center text-[10px] text-gray-500 py-3">
+              Nenhum ícone encontrado
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Section title="Estilo">
+        <ColorField label="Cor" value={el.color ?? '#ffffff'} onChange={v => onChange({ color: v })} />
+        <NumField label="Espessura traço" value={el.strokeWidth ?? 2} onChange={v => onChange({ strokeWidth: v })} min={0.5} max={3} step={0.25} />
+        <ColorField label="Fundo (opcional)" value={el.background ?? ''} onChange={v => onChange({ background: v || undefined })} allowEmpty />
+      </Section>
+
+      {el.background && (
+        <Section title="Padding/raio do fundo">
+          <div className="grid grid-cols-3 gap-2">
+            <NumField label="Pad-X" value={el.paddingX ?? 8} onChange={v => onChange({ paddingX: Math.round(v) })} min={0} max={80} step={1} />
+            <NumField label="Pad-Y" value={el.paddingY ?? 8} onChange={v => onChange({ paddingY: Math.round(v) })} min={0} max={80} step={1} />
+            <NumField label="Raio" value={el.borderRadius ?? 0} onChange={v => onChange({ borderRadius: Math.round(v) })} min={0} max={9999} step={1} />
+          </div>
+          <p className="text-[10px] text-gray-500">Dica: raio 9999 = círculo.</p>
+        </Section>
+      )}
     </>
   )
 }

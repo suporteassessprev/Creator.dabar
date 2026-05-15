@@ -18,6 +18,7 @@ export type ElementType =
   | 'image_slot'      // dynamic — Gemini fills at generation
   | 'image_static'    // fixed — uploaded/pasted by admin
   | 'account_badge'   // avatar + @handle pill (Instagram-style)
+  | 'icon'            // lucide-react icon (from curated set)
   | 'shape'
   | 'badge'
   | 'background'
@@ -114,11 +115,28 @@ export interface AccountBadgeElement extends BaseElement {
   avatarSize?: number    // px at canvas reference width
 }
 
+/**
+ * Vector icon from the curated lucide-react set (see lib/template-icons.ts).
+ * `iconName` must match a key in TEMPLATE_ICONS — invalid names fall back
+ * to a placeholder square so templates never crash.
+ */
+export interface IconElement extends BaseElement {
+  type: 'icon'
+  iconName: string       // e.g. "CheckCircle2", "ArrowRight", "Heart"
+  color?: string         // stroke + fill (lucide icons use currentColor)
+  strokeWidth?: number   // 1-3, default 2
+  background?: string    // optional circular/square background behind icon
+  borderRadius?: number  // px; 9999 for circle
+  paddingX?: number      // px padding inside background
+  paddingY?: number
+}
+
 export type TemplateElement =
   | TextElement
   | ImageSlotElement
   | ImageStaticElement
   | AccountBadgeElement
+  | IconElement
   | ShapeElement
   | BackgroundElement
 
