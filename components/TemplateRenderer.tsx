@@ -41,6 +41,13 @@ interface Props {
   onElementClick?: (id: string) => void
   /** When false, hides image_slot description placeholder text. */
   showImageSlotHint?: boolean
+  /**
+   * Map of image_slot element id → data URL of a preview image generated
+   * by the admin. Takes priority over content.imageUrl. Used in the admin
+   * editor so the admin can visualize what the slot will look like with
+   * a real image before saving the template.
+   */
+  previewImages?: Record<string, string>
   className?: string
 }
 
@@ -108,11 +115,16 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
 }
 
 function ImageSlotNode({
-  el, content, showHint,
+  el, content, showHint, previewSrc,
 }: {
-  el: ImageSlotElement; content?: TemplateContent; showHint: boolean
+  el: ImageSlotElement
+  content?: TemplateContent
+  showHint: boolean
+  previewSrc?: string
 }) {
-  const hasImage = !!content?.imageUrl
+  // Priority: admin preview > user-supplied content > placeholder
+  const imageSrc = previewSrc ?? content?.imageUrl
+  const hasImage = !!imageSrc
   const innerStyle: CSSProperties = {
     width: '100%',
     height: '100%',
@@ -134,7 +146,7 @@ function ImageSlotNode({
     <div style={containerStyle}>
       {hasImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={content!.imageUrl!} alt="" style={innerStyle} />
+        <img src={imageSrc!} alt="" style={innerStyle} />
       ) : showHint ? (
         <div
           style={{
@@ -317,13 +329,14 @@ function BackgroundNode({ el }: { el: BackgroundElement }) {
 }
 
 function ElementNode({
-  el, content, selected, showHint, onClick,
+  el, content, selected, showHint, onClick, previewSrc,
 }: {
   el: TemplateElement
   content?: TemplateContent
   selected: boolean
   showHint: boolean
   onClick?: () => void
+  previewSrc?: string
 }) {
   if (el.visible === false) return null
   const wrapperStyle: CSSProperties = {
@@ -340,7 +353,7 @@ function ElementNode({
       node = <TextNode el={el} content={content} />
       break
     case 'image_slot':
-      node = <ImageSlotNode el={el} content={content} showHint={showHint} />
+      node = <ImageSlotNode el={el} content={content} showHint={showHint} previewSrc={previewSrc} />
       break
     case 'image_static':
       node = <ImageStaticNode el={el} />
@@ -371,6 +384,7 @@ export default function TemplateRenderer({
   selectedId = null,
   onElementClick,
   showImageSlotHint = true,
+  previewImages,
   className,
 }: Props) {
   const aspectRatio = ASPECT_RATIO[structure.canvas.format]
@@ -395,6 +409,7 @@ export default function TemplateRenderer({
           selected={selectedId === el.id}
           showHint={showImageSlotHint}
           onClick={onElementClick ? () => onElementClick(el.id) : undefined}
+          previewSrc={el.type === 'image_slot' ? previewImages?.[el.id] : undefined}
         />
       ))}
     </div>
