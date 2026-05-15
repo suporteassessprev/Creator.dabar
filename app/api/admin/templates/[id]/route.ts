@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { parseStructure, validateStructure } from '@/lib/template-structure'
+
+function normalizeStructure(raw: unknown): string | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  if (typeof raw !== 'string') throw new Error('structure deve ser string JSON')
+  const parsed = parseStructure(raw)
+  if (!parsed) throw new Error('structure JSON inválido')
+  const errors = validateStructure(parsed)
+  if (errors.length > 0) throw new Error(errors.map(e => e.message).join(' • '))
+  return JSON.stringify(parsed)
+}
 
 async function checkAdmin() {
   const session = await getSession()
@@ -70,6 +81,13 @@ export async function PUT(
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     }
 
+    let structureJson: string | null
+    try {
+      structureJson = normalizeStructure(data.structure)
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+
     const template = await prisma.template.update({
       where: { id: params.id },
       data: {
@@ -83,6 +101,7 @@ export async function PUT(
         active: data.active ?? true,
         published: data.published ?? false,
         previewImage: data.previewImage || null,
+        structure: structureJson,
       },
     })
 

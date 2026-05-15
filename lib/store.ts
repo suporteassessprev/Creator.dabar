@@ -42,6 +42,12 @@ export interface Carousel {
   format: CreativeFormat
   mode: CarouselMode
   status: 'draft' | 'ready' | 'generating'
+  // Phase 3: if the carousel was generated from a visual template, the
+  // serialized TemplateStructure JSON is stored here. The editor renders
+  // via TemplateRenderer when this is set; otherwise falls back to the
+  // legacy slide layout.
+  templateStructure?: string | null
+  templateId?: string | null
 }
 
 export interface CarouselStyle {

@@ -22,6 +22,7 @@ export async function GET(req: Request) {
       style: true,
       palette: true,
       previewImage: true,
+      structure: true,
     },
     orderBy: { createdAt: 'desc' },
   })
