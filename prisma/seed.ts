@@ -85,11 +85,31 @@ async function seedPlans() {
 
 async function seedAdmin() {
   console.log('Seeding admin user…')
-  const email    = process.env.ADMIN_EMAIL    ?? 'admin@viralpost.local'
-  const password = process.env.ADMIN_PASSWORD ?? 'admin123'
-  const name     = process.env.ADMIN_NAME     ?? 'Admin'
+  const isProd   = process.env.NODE_ENV === 'production'
+  const email    = process.env.ADMIN_EMAIL ?? 'admin@viralpost.local'
+  const password = process.env.ADMIN_PASSWORD
+  const name     = process.env.ADMIN_NAME  ?? 'Admin'
 
-  const hashed = await bcrypt.hash(password, 12)
+  if (!password) {
+    if (isProd) {
+      throw new Error(
+        'ADMIN_PASSWORD env var is required in production. ' +
+        'Generate one with: openssl rand -base64 24'
+      )
+    }
+    console.log('  ⚠️  ADMIN_PASSWORD not set — using default "admin123" for local dev only.')
+  }
+
+  const effectivePassword = password ?? 'admin123'
+
+  if (isProd && effectivePassword === 'admin123') {
+    throw new Error(
+      'Refusing to seed admin with default password "admin123" in production. ' +
+      'Set ADMIN_PASSWORD to a strong value.'
+    )
+  }
+
+  const hashed = await bcrypt.hash(effectivePassword, 12)
 
   const admin = await prisma.user.upsert({
     where:  { email },
@@ -98,8 +118,8 @@ async function seedAdmin() {
   })
 
   console.log(`  ✓ admin: ${admin.email} (role=${admin.role})`)
-  if (password === 'admin123') {
-    console.log('  ⚠️  Using default password "admin123" — change via ADMIN_PASSWORD env var!')
+  if (!isProd && effectivePassword === 'admin123') {
+    console.log('  ⚠️  Default password "admin123" — change via ADMIN_PASSWORD env var before going to production.')
   }
 }
 

@@ -54,10 +54,6 @@ export interface CarouselStyle {
 }
 
 interface AppState {
-  // API Key
-  geminiApiKey: string
-  setGeminiApiKey: (key: string) => void
-
   // Carousels
   carousels: Carousel[]
   addCarousel: (carousel: Carousel) => void
@@ -89,9 +85,6 @@ const defaultStyle: CarouselStyle = {
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
-      geminiApiKey: '',
-      setGeminiApiKey: (key) => set({ geminiApiKey: key }),
-
       carousels: [],
       addCarousel: (carousel) =>
         set((state) => ({ carousels: [carousel, ...state.carousels] })),
@@ -130,7 +123,6 @@ export const useAppStore = create<AppState>()(
     {
       name: 'viral-carousel-store',
       partialize: (state) => ({
-        geminiApiKey: state.geminiApiKey,
         carousels: state.carousels,
       }),
     }

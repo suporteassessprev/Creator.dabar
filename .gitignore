@@ -13,6 +13,9 @@ build
 .env.local
 .env.production
 
+# claude / local agent state (may contain secrets in tool whitelists)
+.claude/settings.local.json
+
 # database
 prisma/dev.db
 prisma/dev.db-journal

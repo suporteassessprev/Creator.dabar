@@ -7,7 +7,6 @@ export interface GenerateCarouselOptions {
   style: CarouselStyle
   tone: 'educativo' | 'motivacional' | 'viral' | 'profissional' | 'humoristico'
   targetAudience: string
-  apiKey: string
 }
 
 export interface GenerateAdCreativeOptions {
@@ -15,7 +14,6 @@ export interface GenerateAdCreativeOptions {
   style: CarouselStyle
   tone: 'educativo' | 'motivacional' | 'viral' | 'profissional' | 'humoristico'
   targetAudience: string
-  apiKey: string
 }
 
 export interface GeneratedSlideContent {
@@ -30,6 +28,30 @@ export interface GeneratedAdCreative {
   subtitle: string
   cta: string
   imagePrompt: string
+}
+
+export const MISSING_GEMINI_KEY_MESSAGE =
+  'A chave de IA do sistema precisa ser atualizada pelo administrador.'
+
+/**
+ * Resolve the server-managed Gemini API key.
+ * The key is read ONLY from process.env.GEMINI_API_KEY — never from the
+ * client. Throws a sanitized error if absent.
+ */
+export function getServerGeminiKey(): string {
+  const key = process.env.GEMINI_API_KEY
+  if (!key || !key.trim()) {
+    throw new GeminiKeyMissingError()
+  }
+  return key
+}
+
+export class GeminiKeyMissingError extends Error {
+  readonly publicMessage = MISSING_GEMINI_KEY_MESSAGE
+  constructor() {
+    super('GEMINI_API_KEY is not configured on the server')
+    this.name = 'GeminiKeyMissingError'
+  }
 }
 
 const CAROUSEL_PROMPT = (opts: GenerateCarouselOptions) => `
@@ -65,13 +87,12 @@ Retorne APENAS um JSON válido neste formato, sem nenhum texto antes ou depois:
 export async function generateCarouselContent(
   opts: GenerateCarouselOptions
 ): Promise<{ title: string; slides: GeneratedSlideContent[] }> {
-  const genAI = new GoogleGenerativeAI(opts.apiKey)
+  const genAI = new GoogleGenerativeAI(getServerGeminiKey())
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const result = await model.generateContent(CAROUSEL_PROMPT(opts))
   const text = result.response.text()
 
-  // Extract JSON from response
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('Resposta inválida da IA. Tente novamente.')
 
@@ -79,12 +100,9 @@ export async function generateCarouselContent(
   return parsed
 }
 
-export async function generateSlideImage(
-  prompt: string,
-  apiKey: string
-): Promise<string | null> {
+export async function generateSlideImage(prompt: string): Promise<string | null> {
   try {
-    const genAI = new GoogleGenerativeAI(apiKey)
+    const genAI = new GoogleGenerativeAI(getServerGeminiKey())
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image' })
 
     const enhancedPrompt = `${prompt}, cinematic lighting, ultra detailed, 4k, vibrant colors, modern aesthetic, no text, no watermark, photorealistic`
@@ -110,7 +128,8 @@ export async function generateSlideImage(
     }
     return null
   } catch (error) {
-    console.error('Error generating image:', error)
+    if (error instanceof GeminiKeyMissingError) throw error
+    console.error('Error generating image')
     return null
   }
 }
@@ -160,7 +179,7 @@ Retorne APENAS JSON válido, sem texto antes ou depois:
 export async function generateAdCreativeContent(
   opts: GenerateAdCreativeOptions
 ): Promise<GeneratedAdCreative> {
-  const genAI = new GoogleGenerativeAI(opts.apiKey)
+  const genAI = new GoogleGenerativeAI(getServerGeminiKey())
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
 
   const result = await model.generateContent(AD_CREATIVE_PROMPT(opts))
