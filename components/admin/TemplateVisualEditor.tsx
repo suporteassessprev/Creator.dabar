@@ -159,6 +159,13 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
   const [saved, setSaved] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [previewMode, setPreviewMode] = useState(false)
+  /**
+   * Map of image_slot element id → data URL of a preview image the admin
+   * generated via "Gerar preview com IA". Kept in memory only — never
+   * persisted with the template (the slot is supposed to be filled at
+   * user-generation time, not by the admin).
+   */
+  const [slotPreviews, setSlotPreviews] = useState<Record<string, string>>({})
 
   const selected = useMemo(
     () => structure.elements.find(e => e.id === selectedId) ?? null,
@@ -500,6 +507,7 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
               selectedId={previewMode ? null : selectedId}
               onElementClick={previewMode ? undefined : setSelectedId}
               showImageSlotHint={!previewMode}
+              previewImages={slotPreviews}
             />
             <div className="mt-3 text-center text-[11px] text-gray-500">
               {previewMode
@@ -519,6 +527,16 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
               onDelete={() => deleteElement(selected.id)}
               onBringForward={() => bringForward(selected.id)}
               onSendBackward={() => sendBackward(selected.id)}
+              previewSrc={slotPreviews[selected.id]}
+              onPreviewChange={(src) => {
+                setSlotPreviews(prev => {
+                  if (!src) {
+                    const { [selected.id]: _, ...rest } = prev
+                    return rest
+                  }
+                  return { ...prev, [selected.id]: src }
+                })
+              }}
             />
           ) : (
             <TemplateMetaPanel
@@ -549,6 +567,8 @@ function PropertiesPanel(props: {
   onDelete: () => void
   onBringForward: () => void
   onSendBackward: () => void
+  previewSrc?: string
+  onPreviewChange?: (src: string | null) => void
 }) {
   const { element: el, onChange } = props
   const Icon = ELEMENT_ICONS[el.type]
@@ -577,7 +597,12 @@ function PropertiesPanel(props: {
         <TextPropsPanel el={el as TextElement} onChange={onChange} />
       )}
       {el.type === 'image_slot' && (
-        <ImageSlotPropsPanel el={el as ImageSlotElement} onChange={onChange} />
+        <ImageSlotPropsPanel
+          el={el as ImageSlotElement}
+          onChange={onChange}
+          previewSrc={props.previewSrc}
+          onPreviewChange={props.onPreviewChange}
+        />
       )}
       {el.type === 'image_static' && (
         <ImageStaticPropsPanel el={el as ImageStaticElement} onChange={onChange} />
@@ -661,8 +686,42 @@ function TextPropsPanel({ el, onChange }: { el: TextElement; onChange: (p: Parti
   )
 }
 
-function ImageSlotPropsPanel({ el, onChange }: { el: ImageSlotElement; onChange: (p: Partial<ImageSlotElement>) => void }) {
+function ImageSlotPropsPanel({
+  el, onChange, previewSrc, onPreviewChange,
+}: {
+  el: ImageSlotElement
+  onChange: (p: Partial<ImageSlotElement>) => void
+  previewSrc?: string
+  onPreviewChange?: (src: string | null) => void
+}) {
   const [showPromptsModal, setShowPromptsModal] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+
+  async function generatePreview() {
+    if (!el.description.trim()) {
+      setGenError('Adicione uma descrição antes de gerar')
+      return
+    }
+    setGenError(null)
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: el.description, mode: 'creative' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+      if (!data.imageData) throw new Error('IA não retornou imagem')
+      onPreviewChange?.(data.imageData)
+    } catch (e: any) {
+      setGenError(e.message ?? 'Erro ao gerar')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   return (
     <>
       <Section title="Descrição (obrigatória)">
@@ -676,14 +735,52 @@ function ImageSlotPropsPanel({ el, onChange }: { el: ImageSlotElement; onChange:
         <p className="text-[10px] text-gray-500 mt-1">
           Esta descrição NÃO é mostrada ao usuário final — só serve para você documentar o slot.
         </p>
-        <button
-          onClick={() => setShowPromptsModal(true)}
-          className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] glass hover:bg-white/10 text-purple-300 border border-purple-500/20 transition-all"
-          type="button"
-        >
-          <Sparkles size={11} />
-          Ver prompts da IA
-        </button>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <button
+            onClick={generatePreview}
+            disabled={generating}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 text-purple-200 border border-purple-500/30 transition-all disabled:opacity-60"
+            type="button"
+            title="Chama o Gemini para gerar uma imagem real baseada na descrição — só visual, não fica salva"
+          >
+            {generating ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+            {generating ? 'Gerando...' : (previewSrc ? 'Gerar de novo' : 'Gerar preview IA')}
+          </button>
+          <button
+            onClick={() => setShowPromptsModal(true)}
+            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] glass hover:bg-white/10 text-purple-300 border border-purple-500/20 transition-all"
+            type="button"
+          >
+            <Eye size={11} />
+            Ver prompts
+          </button>
+        </div>
+
+        {previewSrc && (
+          <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400">
+            <span className="flex items-center gap-1">
+              <CheckCircle2 size={10} className="text-green-400" />
+              Preview ativo no canvas
+            </span>
+            <button
+              onClick={() => onPreviewChange?.(null)}
+              className="text-red-400 hover:text-red-300"
+              type="button"
+            >
+              Limpar
+            </button>
+          </div>
+        )}
+
+        {genError && (
+          <div className="mt-2 text-[10px] text-red-400 bg-red-500/10 rounded p-2 border border-red-500/20">
+            {genError}
+          </div>
+        )}
+
+        <p className="text-[10px] text-gray-500 mt-2">
+          ℹ️ O preview é apenas visual — não fica salvo no template. Na geração real, o tema do usuário se mistura ao prompt.
+        </p>
       </Section>
       <Section title="Ajuste">
         <SelectField
