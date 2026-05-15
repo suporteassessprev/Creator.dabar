@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   Plus, RefreshCw, Loader2, AlertCircle,
   Edit2, Copy, Trash2, Eye, EyeOff,
-  ToggleLeft, ToggleRight, Filter,
+  ToggleLeft, ToggleRight, Filter, Sparkles,
 } from 'lucide-react'
 
 /* ─── Types ─────────────────────────────────────────── */
@@ -279,6 +279,13 @@ export default function AdminTemplatesPage() {
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             Atualizar
           </button>
+          <Link
+            href="/admin/templates/from-image"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold glass border border-purple-500/30 text-purple-300 hover:bg-purple-500/10 transition-all"
+            title="Envie um print de um criativo e a IA recria como template editável"
+          >
+            <Sparkles size={16} /> Criar com IA
+          </Link>
           <Link
             href="/admin/templates/new"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 transition-all"
