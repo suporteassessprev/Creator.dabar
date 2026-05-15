@@ -2,16 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import TemplateForm, { type TemplateFormValues } from '@/components/admin/TemplateForm'
+import TemplateVisualEditor, { type TemplateMeta } from '@/components/admin/TemplateVisualEditor'
+import { parseStructure, type TemplateStructure } from '@/lib/template-structure'
 import { Loader2, AlertCircle } from 'lucide-react'
 
 export default function EditTemplatePage() {
   const params = useParams()
   const id = params.id as string
 
-  const [values,  setValues]  = useState<Partial<TemplateFormValues> | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState('')
+  const [meta,      setMeta]      = useState<TemplateMeta | null>(null)
+  const [structure, setStructure] = useState<TemplateStructure | undefined>(undefined)
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState('')
 
   useEffect(() => {
     async function load() {
@@ -19,16 +21,15 @@ export default function EditTemplatePage() {
         const res = await fetch(`/api/admin/templates/${id}`)
         if (!res.ok) throw new Error('Template não encontrado')
         const data = await res.json()
-        setValues({
-          name:        data.name,
+        setMeta({
+          name:        data.name ?? '',
           description: data.description ?? '',
-          mode:        data.mode,
-          format:      data.format,
-          layout:      data.layout,
-          palette:     data.palette,
-          active:      data.active,
-          published:   data.published,
+          mode:        data.mode ?? 'creative',
+          active:      data.active ?? true,
+          published:   data.published ?? false,
         })
+        const parsed = parseStructure(data.structure)
+        setStructure(parsed ?? undefined)
       } catch (e: any) {
         setError(e.message)
       } finally {
@@ -47,7 +48,7 @@ export default function EditTemplatePage() {
     )
   }
 
-  if (error || !values) {
+  if (error || !meta) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="glass rounded-2xl p-8 text-center max-w-sm">
@@ -59,5 +60,11 @@ export default function EditTemplatePage() {
     )
   }
 
-  return <TemplateForm initialValues={values} templateId={id} />
+  return (
+    <TemplateVisualEditor
+      templateId={id}
+      initialMeta={meta}
+      initialStructure={structure}
+    />
+  )
 }

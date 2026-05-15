@@ -1,6 +1,22 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { parseStructure, validateStructure } from '@/lib/template-structure'
+
+/**
+ * Accept and validate the structure field. Returns either the
+ * normalized JSON string (re-serialized to ensure shape) or null.
+ * Throws with a user-readable message if invalid.
+ */
+function normalizeStructure(raw: unknown): string | null {
+  if (raw === null || raw === undefined || raw === '') return null
+  if (typeof raw !== 'string') throw new Error('structure deve ser string JSON')
+  const parsed = parseStructure(raw)
+  if (!parsed) throw new Error('structure JSON inválido')
+  const errors = validateStructure(parsed)
+  if (errors.length > 0) throw new Error(errors.map(e => e.message).join(' • '))
+  return JSON.stringify(parsed)
+}
 
 async function checkAdmin() {
   const session = await getSession()
@@ -76,6 +92,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
     }
 
+    let structureJson: string | null
+    try {
+      structureJson = normalizeStructure(data.structure)
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+
     const template = await prisma.template.create({
       data: {
         name: data.name.trim(),
@@ -88,12 +111,13 @@ export async function POST(req: Request) {
         active: data.active ?? true,
         published: data.published ?? false,
         previewImage: data.previewImage || null,
+        structure: structureJson,
         authorId: session.userId,
       },
     })
 
     return NextResponse.json(template, { status: 201 })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    return NextResponse.json({ error: e.message ?? 'Erro ao criar template' }, { status: 500 })
   }
 }

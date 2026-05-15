@@ -62,6 +62,7 @@ interface PublishedTemplate {
   layout: string
   style: string | null
   palette: string | null
+  structure?: string | null  // Phase 3: visual template JSON, may be null for legacy
 }
 
 interface ParsedPalette {
@@ -210,6 +211,17 @@ export default function GeneratorPage() {
 
       const carousel = createNewCarousel(topic, { style, format, mode })
       carousel.style = style
+
+      // Phase 3: if a visual template is selected, carry its structure +
+      // id onto the carousel. The editor renders via TemplateRenderer
+      // when this is set; otherwise falls back to the legacy slide layout.
+      if (selectedTemplate?.structure) {
+        carousel.templateStructure = selectedTemplate.structure
+        carousel.templateId = selectedTemplate.id
+      } else {
+        carousel.templateStructure = null
+        carousel.templateId = selectedTemplate?.id ?? null
+      }
 
       if (data.mode === 'creative' && data.creative) {
         carousel.title  = data.creative.headline

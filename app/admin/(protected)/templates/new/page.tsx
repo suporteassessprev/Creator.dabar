@@ -1,7 +1,17 @@
-import TemplateForm from '@/components/admin/TemplateForm'
+import TemplateVisualEditor from '@/components/admin/TemplateVisualEditor'
 
-export const metadata = { title: 'Novo Template — ViralPost Admin' }
+export const metadata = { title: 'Novo Template — Creator Dabar Admin' }
 
 export default function NewTemplatePage() {
-  return <TemplateForm />
+  return (
+    <TemplateVisualEditor
+      initialMeta={{
+        name: '',
+        description: '',
+        mode: 'creative',
+        active: true,
+        published: false,
+      }}
+    />
+  )
 }

@@ -4,8 +4,10 @@ import { useEffect, useState, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import SlidePreview from '@/components/SlidePreview'
+import TemplateRenderer from '@/components/TemplateRenderer'
 import ExportZipButton from '@/components/ExportZipButton'
 import { useAppStore, Slide, SlideLayout, CreativeFormat } from '@/lib/store'
+import { parseStructure } from '@/lib/template-structure'
 import {
   Save, Download, ChevronLeft, ChevronRight,
   Type, Palette, Image, Layout, Loader2,
@@ -218,17 +220,38 @@ function EditorContent() {
                 </button>
               </div>
 
-              {/* The actual slide */}
+              {/* The actual slide.
+                  Phase 3: when the carousel carries a templateStructure
+                  from the generator, render via TemplateRenderer using
+                  the slide's title/subtitle/cta/imageUrl as content.
+                  Legacy carousels (no structure) use SlidePreview. */}
               <div ref={slideRef}>
-                {activeSlide && (
-                  <SlidePreview
-                    slide={activeSlide}
-                    index={activeSlideIndex}
-                    size="lg"
-                    format={carousel.format}
-                    showSlideNumber={carousel.mode === 'carousel'}
-                  />
-                )}
+                {activeSlide && (() => {
+                  const tpl = parseStructure(carousel.templateStructure ?? null)
+                  if (tpl) {
+                    return (
+                      <TemplateRenderer
+                        structure={tpl}
+                        content={{
+                          headline: activeSlide.title,
+                          subtitle: activeSlide.subtitle ?? activeSlide.content,
+                          cta:      activeSlide.cta,
+                          imageUrl: activeSlide.imageUrl,
+                        }}
+                        showImageSlotHint={false}
+                      />
+                    )
+                  }
+                  return (
+                    <SlidePreview
+                      slide={activeSlide}
+                      index={activeSlideIndex}
+                      size="lg"
+                      format={carousel.format}
+                      showSlideNumber={carousel.mode === 'carousel'}
+                    />
+                  )
+                })()}
               </div>
             </div>
           </div>

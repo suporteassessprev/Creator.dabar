@@ -174,6 +174,9 @@ model Template {
   active        Boolean  @default(true)
   published     Boolean  @default(false)
   previewImage  String?
+  // Phase 3: visual template structure (JSON-encoded TemplateStructure).
+  // NULL = legacy template, renders with the `layout` field. Non-null overrides.
+  structure     String?
   authorId      String?
   author        User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
   submissionId  String?  @unique
@@ -197,6 +200,8 @@ model TemplateSubmission {
   style        String
   palette      String?
   format       String    @default("square")
+  // Phase 3: optional visual template structure (mirrors Template.structure).
+  structure    String?
   previewImage String?
   status       String    @default("pending") // "pending"|"approved"|"rejected"
   reviewNote   String?
