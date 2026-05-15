@@ -90,27 +90,48 @@ const FORMATS: { value: CanvasFormat; label: string; ratio: string }[] = [
  * Loaded via Google Fonts <link> in the page wrapper.
  * Each option in the FontField renders in its actual face.
  */
-const FONT_OPTIONS: { name: string; group: 'sans' | 'display' | 'serif' | 'system' }[] = [
+const FONT_OPTIONS: { name: string; group: 'sans' | 'display' | 'serif' | 'handwriting' | 'mono' | 'system' }[] = [
   // Sans modernas
-  { name: 'Inter',             group: 'sans'    },
-  { name: 'Poppins',           group: 'sans'    },
-  { name: 'Roboto',            group: 'sans'    },
-  { name: 'Montserrat',        group: 'sans'    },
-  { name: 'Lato',              group: 'sans'    },
-  { name: 'Open Sans',         group: 'sans'    },
-  { name: 'Raleway',           group: 'sans'    },
-  { name: 'Work Sans',         group: 'sans'    },
+  { name: 'Inter',             group: 'sans'        },
+  { name: 'Poppins',           group: 'sans'        },
+  { name: 'Roboto',            group: 'sans'        },
+  { name: 'Montserrat',        group: 'sans'        },
+  { name: 'Lato',              group: 'sans'        },
+  { name: 'Open Sans',         group: 'sans'        },
+  { name: 'Raleway',           group: 'sans'        },
+  { name: 'Work Sans',         group: 'sans'        },
+  { name: 'Nunito',            group: 'sans'        },
+  { name: 'Manrope',           group: 'sans'        },
+  { name: 'DM Sans',           group: 'sans'        },
   // Display de impacto
-  { name: 'Bebas Neue',        group: 'display' },
-  { name: 'Anton',             group: 'display' },
-  { name: 'Oswald',            group: 'display' },
-  { name: 'Archivo Black',     group: 'display' },
+  { name: 'Bebas Neue',        group: 'display'     },
+  { name: 'Anton',             group: 'display'     },
+  { name: 'Oswald',            group: 'display'     },
+  { name: 'Archivo Black',     group: 'display'     },
+  { name: 'Bungee',            group: 'display'     },
+  { name: 'Rubik Mono One',    group: 'display'     },
+  { name: 'Russo One',         group: 'display'     },
+  { name: 'Black Ops One',     group: 'display'     },
+  { name: 'Passion One',       group: 'display'     },
+  { name: 'Alfa Slab One',     group: 'display'     },
   // Serif premium
-  { name: 'Playfair Display',  group: 'serif'   },
-  { name: 'Merriweather',      group: 'serif'   },
-  { name: 'DM Serif Display',  group: 'serif'   },
+  { name: 'Playfair Display',  group: 'serif'       },
+  { name: 'Merriweather',      group: 'serif'       },
+  { name: 'DM Serif Display',  group: 'serif'       },
+  { name: 'Lora',              group: 'serif'       },
+  { name: 'Cormorant Garamond',group: 'serif'       },
+  { name: 'Crimson Pro',       group: 'serif'       },
+  // Handwriting / decorativas
+  { name: 'Caveat',            group: 'handwriting' },
+  { name: 'Permanent Marker',  group: 'handwriting' },
+  { name: 'Patrick Hand',      group: 'handwriting' },
+  { name: 'Pacifico',          group: 'handwriting' },
+  { name: 'Dancing Script',    group: 'handwriting' },
+  // Mono
+  { name: 'JetBrains Mono',    group: 'mono'        },
+  { name: 'Fira Code',         group: 'mono'        },
   // Sistema
-  { name: 'system-ui',         group: 'system'  },
+  { name: 'system-ui',         group: 'system'      },
 ]
 
 /* ─── Factories for new elements ────────────────────────────────────── */
@@ -1463,14 +1484,16 @@ function FontField({
         className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-blue-500/50"
         style={{ fontFamily: value }}
       >
-        {(['sans','display','serif','system'] as const).map(group => (
+        {(['sans','display','serif','handwriting','mono','system'] as const).map(group => (
           <optgroup
             key={group}
             label={
-              group === 'sans'    ? 'Sans modernas' :
-              group === 'display' ? 'Display impacto' :
-              group === 'serif'   ? 'Serif premium' :
-                                    'Sistema'
+              group === 'sans'        ? 'Sans modernas' :
+              group === 'display'     ? 'Display impacto' :
+              group === 'serif'       ? 'Serif premium' :
+              group === 'handwriting' ? 'Handwriting / Decorativas' :
+              group === 'mono'        ? 'Monoespaçada' :
+                                        'Sistema'
             }
           >
             {FONT_OPTIONS.filter(f => f.group === group).map(f => (

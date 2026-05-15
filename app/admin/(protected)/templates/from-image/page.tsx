@@ -99,6 +99,7 @@ export default function CreateTemplateFromImagePage() {
     setError(null)
     setPhase('extracting')
     setStructure(null)
+    setSlotPreviews({})
     try {
       const res = await fetch('/api/admin/templates/from-image', {
         method: 'POST',
@@ -109,10 +110,47 @@ export default function CreateTemplateFromImagePage() {
       if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
       setStructure(data.structure)
       setPhase('preview')
+      // Kick off preview images in parallel for every image_slot — admin
+      // sees the template with real images instead of placeholder cinza.
+      void generatePreviewsForSlots(data.structure)
     } catch (e: any) {
       setError(e.message ?? 'Erro ao analisar imagem')
       setPhase('error')
     }
+  }
+
+  /**
+   * For each image_slot in the structure, kick off a /api/generate-image
+   * call in parallel. The results populate slotPreviews as they arrive,
+   * so the preview pane fills in image-by-image without blocking the
+   * UI. Failures per-slot are silent (we just keep the placeholder).
+   */
+  const [slotPreviews, setSlotPreviews] = useState<Record<string, string>>({})
+  const [generatingSlots, setGeneratingSlots] = useState(false)
+
+  async function generatePreviewsForSlots(struct: TemplateStructure) {
+    const slots = struct.elements.filter(e => e.type === 'image_slot') as any[]
+    if (slots.length === 0) return
+    setGeneratingSlots(true)
+    await Promise.all(
+      slots.map(async (slot) => {
+        try {
+          const res = await fetch('/api/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: slot.description || 'abstract background', mode: 'creative' }),
+          })
+          if (!res.ok) return
+          const data = await res.json()
+          if (data.imageData) {
+            setSlotPreviews(prev => ({ ...prev, [slot.id]: data.imageData }))
+          }
+        } catch {
+          // ignore per-slot failures — placeholder stays
+        }
+      })
+    )
+    setGeneratingSlots(false)
   }
 
   async function save(goToEditor: boolean) {
@@ -133,7 +171,7 @@ export default function CreateTemplateFromImagePage() {
           text: '#ffffff',
         }),
         active:      true,
-        published:   false,
+        published:   true,  // auto-publish — admin can unpublish from the list if needed
         structure:   JSON.stringify(structure),
       }
       const res = await fetch('/api/admin/templates', {
@@ -308,8 +346,15 @@ export default function CreateTemplateFromImagePage() {
                   <TemplateRenderer
                     structure={structure}
                     showImageSlotHint
+                    previewImages={slotPreviews}
                   />
                 </div>
+                {generatingSlots && (
+                  <p className="text-[10px] text-purple-300 mt-2 text-center flex items-center justify-center gap-1.5">
+                    <Loader2 size={11} className="animate-spin" />
+                    Gerando imagens com IA pros image_slots...
+                  </p>
+                )}
 
                 <div className="mt-4 flex flex-wrap gap-2 text-[10px]">
                   <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/20">

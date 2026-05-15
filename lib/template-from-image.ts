@@ -14,30 +14,56 @@ import { TemplateStructure, validateStructure, parseStructure } from './template
 import { ICON_NAMES } from './template-icons'
 
 export const EXTRACT_TEMPLATE_PROMPT = `
-Você é um analisador especialista em design de templates de redes sociais e anúncios virais. Analise a imagem fornecida e retorne um JSON puro descrevendo a estrutura visual em formato editável.
+Você é um analisador especialista em design de templates de redes sociais e anúncios virais. Analise a imagem fornecida MINUCIOSAMENTE e retorne um JSON puro descrevendo a estrutura visual em formato editável.
+
+⚡ PRIORIDADES MÁXIMAS (não erre):
+1. GRADIENTE no fundo — se o fundo tem QUALQUER transição de cor (mesmo sutil), USE \`linear-gradient(...)\` ou \`radial-gradient(...)\` no fill do background, NUNCA simplifique para cor sólida.
+2. TAMANHO REAL das fontes — observe a proporção visual. Headline gigantesco = fontSize 80-120. Body normal = 18-28. Footer pequeno = 12-16.
+3. FONTE CORRETA — analise CARACTERÍSTICAS VISUAIS: condensada/larga, serif/sans, peso, contraste. Combine com a tabela de fontes abaixo.
+4. ACCENT COLOR — palavras em cor diferente dentro do mesmo headline devem ser envolvidas por *asteriscos*.
+5. POSIÇÃO PROPORCIONAL — TODAS posições em PORCENTAGEM (0-100). Meça a altura do texto como % da altura do canvas.
 
 REGRAS GERAIS:
-- TODAS posições e tamanhos em PORCENTAGEM do canvas (0-100), nunca pixels.
-- Identifique o formato do canvas: "1:1" (quadrado), "4:5" (feed vertical), ou "9:16" (story).
 - Cores em hex (#RRGGBB) ou rgba(r,g,b,a) quando houver transparência.
-- Use *asteriscos* para destacar palavras em cor diferente dentro de um headline (ex: "GERE *IMAGENS* VIRAIS" — IMAGENS terá cor accent).
-- Identifique TODOS os elementos visíveis. Não omita nada.
-- Use o tipo CORRETO pra cada elemento.
+- Identifique formato: "1:1" (quadrado), "4:5" (feed vertical), ou "9:16" (story).
+- Identifique TODOS elementos visíveis — incluindo bordas decorativas, cantos coloridos, divisores.
+- IDs únicos descritivos. zIndex crescente do fundo (0) pros textos (10+).
 
-TIPOS DE ELEMENTO DISPONÍVEIS:
-1. background — fundo do canvas. Cor sólida ou CSS gradient (linear-gradient, radial-gradient).
-2. text_headline — texto grande/título principal. Suporta *asterisk highlight*.
-3. text_subtitle — texto médio (body, descrição, subtítulo).
-4. text_cta — botão pílula com fundo, padding, raio (geralmente "SAIBA MAIS", "Clique aqui").
-5. badge — pílula pequena estilo etiqueta (geralmente decorativo, "NOVO", "+R$ X").
-6. account_badge — avatar circular + @handle (Instagram-style). Use quando vir esse padrão.
-7. image_static — imagem fixa do design (foto, mockup, logo). Use src: "PLACEHOLDER" — o admin vai substituir.
-8. image_slot — placeholder pra imagem que será gerada por IA depois. Use APENAS se a imagem parece um lugar pra fundo genérico que muda por tema (não pra logos/mockups específicos).
-9. icon — ícone vetorial. iconName DEVE ser um dos: ${ICON_NAMES.join(', ')}.
-10. shape — retângulo (shape: "rectangle") ou círculo (shape: "circle") decorativo.
+🎨 DETECÇÃO DE GRADIENTE (importante!):
+- Se você vê QUALQUER variação de tom no fundo (mais escuro num canto, mais claro noutro), É GRADIENTE.
+- Padrões comuns:
+  - Gradient diagonal: \`linear-gradient(135deg, #cor1 0%, #cor2 100%)\`
+  - Gradient horizontal: \`linear-gradient(90deg, ...)\`
+  - Gradient vertical: \`linear-gradient(180deg, ...)\`
+  - Spotlight radial: \`radial-gradient(circle at 50% 30%, #claro 0%, #escuro 80%)\`
+- Identifique 2-3 cores do gradient com base nos extremos.
 
-CAMPOS POR TIPO:
-- BaseElement (todos): { id, type, x, y, width, height, zIndex, visible? }
+📝 DETECÇÃO DE FONTE — características visuais:
+- **Bebas Neue / Anton / Oswald**: SANS condensada (estreita), maiúsculas dominantes, peso alto (900). Use pra headlines grandes "GERE *IMAGENS*".
+- **Archivo Black / Inter Black (weight 900)**: SANS larga e geométrica, muito pesada. Headlines impacto blocos.
+- **Playfair Display / DM Serif Display / Merriweather**: SERIF clássica, contraste alto entre traços. Headlines elegantes.
+- **Poppins / Montserrat / Lato**: SANS humanista arredondada. Pra body, médio.
+- **Inter / Work Sans / Roboto**: SANS neutra moderna. Body text, parágrafos.
+- **Permanent Marker / Caveat / Patrick Hand**: HANDWRITING / brush. Decorativo.
+- **Bungee / Rubik Mono One**: SANS quadradona, bloco. Headlines retrô.
+
+PESO DA FONTE — observe o traço visual:
+- 400 normal · 500 medium · 600 semibold · 700 bold · 800 extrabold · 900 black
+- Headlines virais geralmente 800-900. Body 400-500. CTA 600-700.
+
+TIPOS DE ELEMENTO:
+1. background — Cor sólida OU gradient (linear/radial). USE GRADIENT quando aplicável.
+2. text_headline — Título principal grande. Suporta *asterisk highlight*. fontSize 60-120 dependendo do destaque.
+3. text_subtitle — Texto médio (body, descrição). fontSize 18-32.
+4. text_cta — Botão pílula com background + padding + borderRadius. Ex: "Clique em saiba mais".
+5. badge — Pílula pequena decorativa.
+6. account_badge — Avatar circular + @handle.
+7. image_static — Imagem FIXA (foto, mockup, logo). src: "PLACEHOLDER".
+8. image_slot — APENAS placeholder pra imagem futura genérica. Description explicativa.
+9. icon — Ícone vetorial. iconName de: ${ICON_NAMES.join(', ')}.
+10. shape — Retângulo/círculo decorativo. Pode ter borderColor (cantos coloridos como em advocacia).
+
+CAMPOS:
 - text_*: { placeholder, fontFamily, fontSize, fontWeight, color, accentColor?, align, lineHeight, background?, borderRadius?, paddingX?, paddingY? }
 - account_badge: { handle, fontFamily, fontSize, fontWeight, color, avatarSize }
 - image_static: { src: "PLACEHOLDER", objectFit, borderRadius, alt }
@@ -46,30 +72,22 @@ CAMPOS POR TIPO:
 - shape: { shape: "rectangle"|"circle", fill, borderRadius?, borderColor?, borderWidth?, opacity? }
 - background: { fill }
 
-FONTES SUGERIDAS (escolha a que mais combina visualmente):
-- Display impacto: Bebas Neue, Anton, Oswald, Archivo Black
-- Sans modernas: Inter, Poppins, Montserrat, Work Sans
-- Serif: Playfair Display, DM Serif Display, Merriweather
-
-PESO DA FONTE:
-- 400 (regular), 600 (semibold), 700 (bold), 900 (black/extrabold)
-
-EXEMPLO DE SAÍDA:
+EXEMPLO COM GRADIENT + ACCENT:
 {
   "version": 1,
   "canvas": { "format": "1:1", "backgroundColor": "#0f172a" },
   "elements": [
-    { "id": "bg", "type": "background", "x": 0, "y": 0, "width": 100, "height": 100, "zIndex": 0, "fill": "#0f172a" },
-    { "id": "acc", "type": "account_badge", "x": 5, "y": 5, "width": 35, "height": 5, "zIndex": 5, "handle": "@meu_perfil", "fontFamily": "Inter", "fontSize": 24, "fontWeight": 600, "color": "#ffffff", "avatarSize": 40 },
-    { "id": "hl", "type": "text_headline", "x": 5, "y": 18, "width": 90, "height": 25, "zIndex": 10, "placeholder": "O *CUSTO OCULTO* DA IA", "fontFamily": "Anton", "fontSize": 88, "fontWeight": 900, "color": "#ffffff", "accentColor": "#facc15", "align": "left", "lineHeight": 1.05 }
+    { "id": "bg", "type": "background", "x": 0, "y": 0, "width": 100, "height": 100, "zIndex": 0, "fill": "linear-gradient(135deg, #ff00ea 0%, #d946ef 50%, #f0abfc 100%)" },
+    { "id": "hl", "type": "text_headline", "x": 5, "y": 15, "width": 90, "height": 28, "zIndex": 10, "placeholder": "Mamãe, você conhece o *AUXÍLIO MATERNIDADE*?", "fontFamily": "Archivo Black", "fontSize": 96, "fontWeight": 900, "color": "#ffffff", "accentColor": "#ffffff", "align": "left", "lineHeight": 1.0 }
   ]
 }
 
 INSTRUÇÕES FINAIS:
-- Retorne APENAS o JSON. SEM markdown, sem comentários, sem texto antes/depois.
-- IDs únicos e descritivos ("bg", "acc1", "hl1", "subt1", "cta1").
-- zIndex crescente do fundo pra frente (background=0, decorações=1-5, textos=10+).
-- Posições aproximadas — não precisa ser pixel-perfect. O admin vai refinar.
+- Retorne APENAS o JSON. SEM markdown, sem texto antes/depois.
+- IDs únicos curtos ("bg", "hl1", "sub1", "cta1").
+- Posições aproximadas mas proporcionais — o admin refina.
+- Quando em dúvida sobre gradient, ASSUMA que tem (raro um design ter cor sólida 100%).
+- Quando em dúvida sobre fonte, escolha a MAIS PRÓXIMA visualmente da tabela acima.
 `.trim()
 
 export interface ExtractionResult {
