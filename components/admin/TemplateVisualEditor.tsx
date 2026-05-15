@@ -27,10 +27,11 @@ import {
   validateStructure,
   ASPECT_RATIO,
 } from '@/lib/template-structure'
+import type { LucideIcon } from 'lucide-react'
 import {
   Save, ArrowLeft, Eye, EyeOff, Lock, Unlock, Copy as CopyIcon, Trash2,
   ChevronUp, ChevronDown, Plus, Loader2, AlertCircle, CheckCircle2,
-  Type, Image as ImageIcon, Square as SquareIcon, Circle as CircleIcon,
+  Type, Image as ImageIcon, Square as SquareIcon,
   PaintBucket, Tag,
 } from 'lucide-react'
 
@@ -59,7 +60,7 @@ const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
   background:    'Fundo',
 }
 
-const ELEMENT_ICONS: Record<ElementType, React.ComponentType<{ size?: number }>> = {
+const ELEMENT_ICONS: Record<ElementType, LucideIcon> = {
   text_headline: Type,
   text_subtitle: Type,
   text_cta:      Type,
@@ -763,7 +764,7 @@ function ColorField({
 function ActionBtn({
   icon: Icon, label, onClick, danger,
 }: {
-  icon: any; label: string; onClick: () => void; danger?: boolean
+  icon: LucideIcon; label: string; onClick: () => void; danger?: boolean
 }) {
   return (
     <button
