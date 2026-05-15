@@ -10,7 +10,7 @@
  *
  * Positioning is via numeric inputs (X/Y/W/H in % 0-100). No mouse drag.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TemplateRenderer from '@/components/TemplateRenderer'
 import {
@@ -32,7 +32,7 @@ import {
   Save, ArrowLeft, Eye, EyeOff, Lock, Unlock, Copy as CopyIcon, Trash2,
   ChevronUp, ChevronDown, Plus, Loader2, AlertCircle, CheckCircle2,
   Type, Image as ImageIcon, Square as SquareIcon,
-  PaintBucket, Tag,
+  PaintBucket, Tag, Sparkles, X,
 } from 'lucide-react'
 
 /* ─── Form metadata fields (kept for backward compat with old API) ──── */
@@ -74,6 +74,34 @@ const FORMATS: { value: CanvasFormat; label: string; ratio: string }[] = [
   { value: '1:1',  label: '1:1 Quadrado', ratio: '1080×1080' },
   { value: '4:5',  label: '4:5 Feed',     ratio: '1080×1350' },
   { value: '9:16', label: '9:16 Story',   ratio: '1080×1920' },
+]
+
+/**
+ * Curated font list — covers the most common viral creative styles.
+ * Loaded via Google Fonts <link> in the page wrapper.
+ * Each option in the FontField renders in its actual face.
+ */
+const FONT_OPTIONS: { name: string; group: 'sans' | 'display' | 'serif' | 'system' }[] = [
+  // Sans modernas
+  { name: 'Inter',             group: 'sans'    },
+  { name: 'Poppins',           group: 'sans'    },
+  { name: 'Roboto',            group: 'sans'    },
+  { name: 'Montserrat',        group: 'sans'    },
+  { name: 'Lato',              group: 'sans'    },
+  { name: 'Open Sans',         group: 'sans'    },
+  { name: 'Raleway',           group: 'sans'    },
+  { name: 'Work Sans',         group: 'sans'    },
+  // Display de impacto
+  { name: 'Bebas Neue',        group: 'display' },
+  { name: 'Anton',             group: 'display' },
+  { name: 'Oswald',            group: 'display' },
+  { name: 'Archivo Black',     group: 'display' },
+  // Serif premium
+  { name: 'Playfair Display',  group: 'serif'   },
+  { name: 'Merriweather',      group: 'serif'   },
+  { name: 'DM Serif Display',  group: 'serif'   },
+  // Sistema
+  { name: 'system-ui',         group: 'system'  },
 ]
 
 /* ─── Factories for new elements ────────────────────────────────────── */
@@ -355,6 +383,28 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
                     >
                       {el.locked ? <Lock size={11} /> : <Unlock size={11} />}
                     </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const critical = el.type === 'text_headline' || el.type === 'image_slot'
+                        if (critical && !window.confirm(`Excluir camada "${ELEMENT_TYPE_LABELS[el.type]}"?`)) return
+                        deleteElement(el.id)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.stopPropagation()
+                          const critical = el.type === 'text_headline' || el.type === 'image_slot'
+                          if (critical && !window.confirm(`Excluir camada "${ELEMENT_TYPE_LABELS[el.type]}"?`)) return
+                          deleteElement(el.id)
+                        }
+                      }}
+                      className="text-red-400/60 hover:text-red-400 cursor-pointer"
+                      title="Excluir camada"
+                    >
+                      <Trash2 size={11} />
+                    </span>
                   </button>
                 )
               })}
@@ -506,11 +556,10 @@ function TextPropsPanel({ el, onChange }: { el: TextElement; onChange: (p: Parti
       </Section>
       <Section title="Tipografia">
         <div className="grid grid-cols-2 gap-2">
-          <SelectField
+          <FontField
             label="Fonte"
             value={el.fontFamily ?? 'Inter'}
             onChange={v => onChange({ fontFamily: v })}
-            options={['Inter','Poppins','Roboto','system-ui','Georgia','Arial Black']}
           />
           <NumField label="Tamanho" value={el.fontSize ?? 32} onChange={v => onChange({ fontSize: v })} min={8} max={200} step={1} />
           <NumField label="Peso" value={el.fontWeight ?? 700} onChange={v => onChange({ fontWeight: Math.round(v) })} min={100} max={900} step={100} />
@@ -544,6 +593,7 @@ function TextPropsPanel({ el, onChange }: { el: TextElement; onChange: (p: Parti
 }
 
 function ImageSlotPropsPanel({ el, onChange }: { el: ImageSlotElement; onChange: (p: Partial<ImageSlotElement>) => void }) {
+  const [showPromptsModal, setShowPromptsModal] = useState(false)
   return (
     <>
       <Section title="Descrição (obrigatória)">
@@ -557,6 +607,14 @@ function ImageSlotPropsPanel({ el, onChange }: { el: ImageSlotElement; onChange:
         <p className="text-[10px] text-gray-500 mt-1">
           Esta descrição NÃO é mostrada ao usuário final — só serve para você documentar o slot.
         </p>
+        <button
+          onClick={() => setShowPromptsModal(true)}
+          className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] glass hover:bg-white/10 text-purple-300 border border-purple-500/20 transition-all"
+          type="button"
+        >
+          <Sparkles size={11} />
+          Ver prompts da IA
+        </button>
       </Section>
       <Section title="Ajuste">
         <SelectField
@@ -575,7 +633,138 @@ function ImageSlotPropsPanel({ el, onChange }: { el: ImageSlotElement; onChange:
           placeholder="rgba(0,0,0,0.4)"
         />
       </Section>
+      {showPromptsModal && <AIPromptsModal onClose={() => setShowPromptsModal(false)} />}
     </>
+  )
+}
+
+/**
+ * Read-only modal showing the active prompt templates used by the AI
+ * to generate images. Fetches /api/admin/prompts for the two image
+ * types in parallel. Lets the admin understand WHAT will be sent to
+ * Gemini without leaving the visual editor.
+ */
+function AIPromptsModal({ onClose }: { onClose: () => void }) {
+  const [creative, setCreative] = useState<string | null>(null)
+  const [carousel, setCarousel] = useState<string | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [error,   setError]     = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      fetch('/api/admin/prompts?type=creative_image').then(r => r.ok ? r.json() : []),
+      fetch('/api/admin/prompts?type=carousel_image').then(r => r.ok ? r.json() : []),
+    ])
+      .then(([cr, ca]) => {
+        if (cancelled) return
+        const activeCreative = Array.isArray(cr) ? cr.find((p: any) => p.active) : null
+        const activeCarousel = Array.isArray(ca) ? ca.find((p: any) => p.active) : null
+        setCreative(activeCreative?.content ?? null)
+        setCarousel(activeCarousel?.content ?? null)
+      })
+      .catch(() => { if (!cancelled) setError('Erro ao carregar prompts') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="glass rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Sparkles size={18} className="text-purple-400" />
+            <h2 className="text-lg font-bold">Prompts da IA — image_slot</h2>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-md" type="button">
+            <X size={16} />
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-400 mb-5">
+          Quando o usuário gerar um carrossel usando um template com este image_slot, a IA do Gemini
+          receberá o prompt abaixo (preenchido automaticamente com o tema do usuário). Você pode
+          editar estes templates em <span className="text-blue-400">/admin/prompts</span>.
+        </p>
+
+        {loading && (
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <Loader2 size={14} className="animate-spin" /> Carregando prompts...
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-center gap-2 text-sm text-red-400 glass border border-red-500/20 rounded-xl p-3">
+            <AlertCircle size={14} /> {error}
+          </div>
+        )}
+
+        {!loading && !error && (
+          <div className="space-y-5">
+            <PromptBlock
+              title="Criativo (anúncio único)"
+              type="creative_image"
+              content={creative}
+            />
+            <PromptBlock
+              title="Carrossel (multi-slide)"
+              type="carousel_image"
+              content={carousel}
+            />
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between pt-4 border-t border-white/5">
+          <a
+            href="/admin/prompts"
+            className="text-xs text-blue-400 hover:text-blue-300 underline"
+          >
+            Editar em /admin/prompts →
+          </a>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-lg text-xs glass hover:bg-white/10"
+            type="button"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PromptBlock({
+  title, type, content,
+}: {
+  title: string
+  type: string
+  content: string | null
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <h3 className="text-xs font-semibold text-gray-300">{title}</h3>
+        <span className="text-[10px] font-mono text-gray-500 bg-white/5 px-2 py-0.5 rounded">
+          {type}
+        </span>
+      </div>
+      {content ? (
+        <pre className="text-[11px] bg-black/30 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono text-gray-200 border border-white/5">
+          {content}
+        </pre>
+      ) : (
+        <div className="text-[11px] text-gray-500 italic glass rounded-lg p-3 border border-white/5">
+          Nenhum prompt ativo configurado para este tipo — a IA usará um fallback interno.
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -724,6 +913,49 @@ function SelectField({
         className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-blue-500/50"
       >
         {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </label>
+  )
+}
+
+/**
+ * Font picker — renders each option in its actual face so the admin can
+ * see what each font looks like. The Google Fonts <link> is loaded in
+ * the page wrapper; if a font isn't loaded yet, browser falls back.
+ */
+function FontField({
+  label, value, onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <label className="flex flex-col">
+      <span className="text-[10px] text-gray-400">{label}</span>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="bg-white/5 border border-white/10 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-blue-500/50"
+        style={{ fontFamily: value }}
+      >
+        {(['sans','display','serif','system'] as const).map(group => (
+          <optgroup
+            key={group}
+            label={
+              group === 'sans'    ? 'Sans modernas' :
+              group === 'display' ? 'Display impacto' :
+              group === 'serif'   ? 'Serif premium' :
+                                    'Sistema'
+            }
+          >
+            {FONT_OPTIONS.filter(f => f.group === group).map(f => (
+              <option key={f.name} value={f.name} style={{ fontFamily: f.name }}>
+                {f.name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
       </select>
     </label>
   )
