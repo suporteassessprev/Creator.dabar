@@ -15,7 +15,10 @@ export type ElementType =
   | 'text_headline'
   | 'text_subtitle'
   | 'text_cta'
-  | 'image_slot'
+  | 'image_slot'      // dynamic — Gemini fills at generation
+  | 'image_static'    // fixed — uploaded/pasted by admin
+  | 'account_badge'   // avatar + @handle pill (Instagram-style)
+  | 'icon'            // lucide-react icon (from curated set)
   | 'shape'
   | 'badge'
   | 'background'
@@ -38,11 +41,17 @@ export interface BaseElement {
 
 export interface TextElement extends BaseElement {
   type: 'text_headline' | 'text_subtitle' | 'text_cta' | 'badge'
-  placeholder: string    // "TÍTULO IMPACTANTE", "Subtítulo", "QUERO SABER MAIS"
+  /**
+   * Placeholder content. Words wrapped in *asterisks* are rendered in
+   * `accentColor` (when set) — useful for highlighting keywords in
+   * viral headlines (e.g. "GERE *IMAGENS* VIRAIS").
+   */
+  placeholder: string
   fontFamily?: string
   fontSize?: number      // px at canvas reference width (1080)
   fontWeight?: number    // 400, 600, 700, 900
   color?: string
+  accentColor?: string   // color for *highlighted words*; defaults to a soft yellow
   align?: TextAlign
   letterSpacing?: number
   lineHeight?: number
@@ -77,9 +86,57 @@ export interface BackgroundElement extends BaseElement {
   fill: string           // solid color or CSS gradient
 }
 
+/**
+ * Static image — uploaded or pasted by the admin. Stored as a data URL
+ * (base64) inside the template structure so the template is fully
+ * self-contained (no external CDN required).
+ */
+export interface ImageStaticElement extends BaseElement {
+  type: 'image_static'
+  src: string            // data:image/...;base64,... OR https://...
+  objectFit?: 'cover' | 'contain' | 'fill'
+  borderRadius?: number  // px
+  opacity?: number       // 0-1
+  alt?: string           // for documentation/accessibility
+}
+
+/**
+ * Instagram-style account badge: circular avatar + @handle text inline.
+ * Used to attribute the carousel to a brand/profile in viral posts.
+ */
+export interface AccountBadgeElement extends BaseElement {
+  type: 'account_badge'
+  handle: string         // "@use.mypostflow"
+  avatarUrl?: string     // data URL or remote URL; falls back to a gradient pill
+  fontFamily?: string
+  fontSize?: number
+  fontWeight?: number
+  color?: string         // handle text color
+  avatarSize?: number    // px at canvas reference width
+}
+
+/**
+ * Vector icon from the curated lucide-react set (see lib/template-icons.ts).
+ * `iconName` must match a key in TEMPLATE_ICONS — invalid names fall back
+ * to a placeholder square so templates never crash.
+ */
+export interface IconElement extends BaseElement {
+  type: 'icon'
+  iconName: string       // e.g. "CheckCircle2", "ArrowRight", "Heart"
+  color?: string         // stroke + fill (lucide icons use currentColor)
+  strokeWidth?: number   // 1-3, default 2
+  background?: string    // optional circular/square background behind icon
+  borderRadius?: number  // px; 9999 for circle
+  paddingX?: number      // px padding inside background
+  paddingY?: number
+}
+
 export type TemplateElement =
   | TextElement
   | ImageSlotElement
+  | ImageStaticElement
+  | AccountBadgeElement
+  | IconElement
   | ShapeElement
   | BackgroundElement
 
@@ -277,4 +334,37 @@ export function resolveText(el: TextElement, content: TemplateContent | undefine
   if (el.type === 'text_subtitle' && content.subtitle) return content.subtitle
   if (el.type === 'text_cta' && content.cta) return content.cta
   return el.placeholder
+}
+
+/**
+ * Parse a string with *asterisk markers* into a list of text segments.
+ * Asterisks demarcate accent words. Even-indexed segments are normal;
+ * odd-indexed segments are accented. Useful for viral headlines like
+ * "GERE *IMAGENS* VIRAIS *AGORA*".
+ *
+ * - Empty asterisks (`* *`) are kept as literal asterisks for safety.
+ * - Escape with backslash: `\*` is a literal asterisk.
+ */
+export interface TextSegment {
+  text: string
+  accent: boolean
+}
+
+export function parseAccentSegments(raw: string): TextSegment[] {
+  if (!raw) return []
+  const segments: TextSegment[] = []
+  const re = /(?<!\\)\*([^*]+)\*/g
+  let lastIndex = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(raw)) !== null) {
+    if (m.index > lastIndex) {
+      segments.push({ text: raw.slice(lastIndex, m.index).replace(/\\\*/g, '*'), accent: false })
+    }
+    segments.push({ text: m[1], accent: true })
+    lastIndex = m.index + m[0].length
+  }
+  if (lastIndex < raw.length) {
+    segments.push({ text: raw.slice(lastIndex).replace(/\\\*/g, '*'), accent: false })
+  }
+  return segments.length > 0 ? segments : [{ text: raw, accent: false }]
 }

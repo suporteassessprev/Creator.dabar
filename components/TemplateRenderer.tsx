@@ -17,12 +17,17 @@ import {
   TemplateElement,
   TextElement,
   ImageSlotElement,
+  ImageStaticElement,
+  AccountBadgeElement,
+  IconElement,
   ShapeElement,
   BackgroundElement,
   TemplateContent,
   ASPECT_RATIO,
   resolveText,
+  parseAccentSegments,
 } from '@/lib/template-structure'
+import { getIcon } from '@/lib/template-icons'
 
 interface Props {
   structure: TemplateStructure
@@ -62,6 +67,8 @@ function selectionRing(selected: boolean): CSSProperties {
 
 function TextNode({ el, content }: { el: TextElement; content?: TemplateContent }) {
   const text = resolveText(el, content)
+  const segments = parseAccentSegments(text)
+  const accentColor = el.accentColor ?? '#facc15' // amber-400 default
   const hasBackground = !!el.background
   const style: CSSProperties = {
     fontFamily: el.fontFamily ?? 'Inter, system-ui, sans-serif',
@@ -87,7 +94,17 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
     overflow: 'hidden',
     wordBreak: 'break-word',
   }
-  return <div style={style}>{text}</div>
+  return (
+    <div style={style}>
+      <span>
+        {segments.map((seg, i) => (
+          <span key={i} style={seg.accent ? { color: accentColor } : undefined}>
+            {seg.text}
+          </span>
+        ))}
+      </span>
+    </div>
+  )
 }
 
 function ImageSlotNode({
@@ -139,6 +156,135 @@ function ImageSlotNode({
       {el.overlay && hasImage && (
         <div style={{ position: 'absolute', inset: 0, background: el.overlay }} />
       )}
+    </div>
+  )
+}
+
+function ImageStaticNode({ el }: { el: ImageStaticElement }) {
+  if (!el.src) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          background: 'rgba(148, 163, 184, 0.15)',
+          border: '2px dashed rgba(148, 163, 184, 0.4)',
+          borderRadius: `${el.borderRadius ?? 0}px`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(148, 163, 184, 0.7)',
+          fontSize: '1cqw',
+        }}
+      >
+        Imagem não definida
+      </div>
+    )
+  }
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        borderRadius: `${el.borderRadius ?? 0}px`,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={el.src}
+        alt={el.alt ?? ''}
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: el.objectFit ?? 'cover',
+          opacity: el.opacity ?? 1,
+          display: 'block',
+        }}
+      />
+    </div>
+  )
+}
+
+function AccountBadgeNode({ el }: { el: AccountBadgeElement }) {
+  const fontSize = `${(el.fontSize ?? 22) / 10.8}cqw`
+  const avatarSize = `${(el.avatarSize ?? 36) / 10.8}cqw`
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.5cqw',
+      }}
+    >
+      <div
+        style={{
+          width: avatarSize,
+          height: avatarSize,
+          borderRadius: '50%',
+          overflow: 'hidden',
+          background: el.avatarUrl
+            ? 'transparent'
+            : 'linear-gradient(135deg, #f97316 0%, #ec4899 50%, #8b5cf6 100%)',
+          flexShrink: 0,
+        }}
+      >
+        {el.avatarUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={el.avatarUrl}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          />
+        )}
+      </div>
+      <span
+        style={{
+          fontFamily: el.fontFamily ?? 'Inter, system-ui, sans-serif',
+          fontSize,
+          fontWeight: el.fontWeight ?? 600,
+          color: el.color ?? '#111111',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {el.handle}
+      </span>
+    </div>
+  )
+}
+
+function IconNode({ el }: { el: IconElement }) {
+  const Icon = getIcon(el.iconName)
+  const hasBackground = !!el.background
+  const containerStyle: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    background: el.background,
+    borderRadius: hasBackground ? `${el.borderRadius ?? 0}px` : undefined,
+    padding: hasBackground
+      ? `${el.paddingY ?? 8}px ${el.paddingX ?? 8}px`
+      : undefined,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: el.color ?? '#ffffff',
+  }
+  if (!Icon) {
+    return (
+      <div style={{ ...containerStyle, color: 'rgba(148, 163, 184, 0.6)', fontSize: '1cqw' }}>
+        ?
+      </div>
+    )
+  }
+  return (
+    <div style={containerStyle}>
+      <Icon
+        size="100%"
+        strokeWidth={el.strokeWidth ?? 2}
+        style={{ width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' }}
+      />
     </div>
   )
 }
@@ -195,6 +341,15 @@ function ElementNode({
       break
     case 'image_slot':
       node = <ImageSlotNode el={el} content={content} showHint={showHint} />
+      break
+    case 'image_static':
+      node = <ImageStaticNode el={el} />
+      break
+    case 'account_badge':
+      node = <AccountBadgeNode el={el} />
+      break
+    case 'icon':
+      node = <IconNode el={el} />
       break
     case 'shape':
       node = <ShapeNode el={el} />
