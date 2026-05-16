@@ -96,8 +96,53 @@ export interface ExtractionResult {
 }
 
 /**
+ * Step 1 prompt: describe in natural language what's visible. Forces
+ * Gemini to reason about colors/fonts/proportions before committing
+ * to JSON. Chain-of-thought tends to produce more accurate JSON.
+ */
+const DESCRIBE_PROMPT = `
+Você é um analisador especialista em design. Olhe a imagem MUITO atentamente e descreva em texto livre (em português) os seguintes aspectos. SEJA ESPECÍFICO E DETALHADO.
+
+1. FORMATO do canvas (1:1, 4:5 ou 9:16) e dimensões aproximadas.
+
+2. FUNDO:
+   - É cor sólida ou GRADIENT? Se gradient, descreva as cores e direção (linear/radial, ângulo).
+   - Há uma FOTO/IMAGEM atrás do design? (ex: silhueta de pessoa, paisagem desfocada)
+   - Se sim, descreva a foto e como ela se mistura com a cor (overlay, opacidade).
+
+3. TEXTOS — pra CADA bloco de texto:
+   - Conteúdo aproximado
+   - Tamanho visual (gigante/grande/médio/pequeno)
+   - Cor (hex aproximado)
+   - Fonte (descreva características: serif/sans, condensada/larga, peso 400-900, formato)
+   - Posição (topo/meio/baixo, esquerda/centro/direita)
+   - Alguma palavra em cor diferente? (accent)
+
+4. ELEMENTOS GRÁFICOS:
+   - Pílulas/botões CTA (cor, texto, ícone interno)
+   - Caixas coloridas de destaque (R$, valores)
+   - Avatar + handle (@perfil)
+   - Bordas decorativas, cantos, divisores
+   - Ícones (check, info, seta...)
+
+5. PROPORÇÕES:
+   - Que % da altura o headline ocupa?
+   - Que % o CTA ocupa?
+   - Espaçamento entre elementos (justo/médio/largo)
+
+Retorne SÓ a descrição em texto. Sem JSON ainda.
+`.trim()
+
+/**
  * Call Gemini Vision with the prompt + image and parse the response.
  * Returns a validated TemplateStructure or throws with a user-readable error.
+ *
+ * Strategy:
+ * 1. Step 1 (describe): Gemini Pro describes the image in detail. This
+ *    chain-of-thought reasoning massively improves extraction quality
+ *    for gradients, fonts, proportions.
+ * 2. Step 2 (convert): same model, feeds description + image + JSON
+ *    schema prompt → outputs structured TemplateStructure.
  */
 export async function extractTemplateFromImage(
   imageDataUrl: string,
@@ -105,19 +150,33 @@ export async function extractTemplateFromImage(
 ): Promise<TemplateStructure> {
   const { GoogleGenerativeAI } = await import('@google/generative-ai')
   const genAI = new GoogleGenerativeAI(geminiApiKey)
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' })
+  // Pro is much better than Flash at visual extraction (worth the extra
+  // cost since this is an admin one-off action, not a hot path).
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' })
 
   // Convert data URL to base64 + mime
   const match = imageDataUrl.match(/^data:(image\/[a-z]+);base64,(.+)$/)
   if (!match) throw new Error('Imagem inválida (esperado data URL)')
   const mimeType = match[1]
   const data     = match[2]
+  const imagePart = { inlineData: { mimeType, data } }
 
-  const result = await model.generateContent([
-    EXTRACT_TEMPLATE_PROMPT,
-    { inlineData: { mimeType, data } },
-  ])
+  // Step 1: describe
+  const describeResult = await model.generateContent([DESCRIBE_PROMPT, imagePart])
+  const description = describeResult.response.text()
 
+  // Step 2: convert to JSON, with the description as context
+  const convertPrompt = `${EXTRACT_TEMPLATE_PROMPT}
+
+────────────────────────────────────────────
+DESCRIÇÃO DETALHADA QUE VOCÊ MESMO FEZ (use como base):
+────────────────────────────────────────────
+${description}
+────────────────────────────────────────────
+
+Agora converta essa descrição em um JSON exato seguindo o schema acima. Retorne APENAS o JSON.`
+
+  const result = await model.generateContent([convertPrompt, imagePart])
   const text = result.response.text()
   const jsonMatch = text.match(/\{[\s\S]*\}/)
   if (!jsonMatch) throw new Error('IA retornou resposta inválida — sem JSON.')

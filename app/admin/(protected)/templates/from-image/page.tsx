@@ -153,6 +153,37 @@ export default function CreateTemplateFromImagePage() {
     setGeneratingSlots(false)
   }
 
+  /**
+   * Quick-fix: when the AI misses a photo background overlay, this lets
+   * the admin inject the original reference image as a full-canvas
+   * image_static with low opacity behind everything else. Useful for
+   * templates like the INSS-style ads where a faint photo of a person
+   * tints the gradient.
+   */
+  function useOriginalAsBackground() {
+    if (!structure || !imageDataUrl) return
+    // Check if we already added it
+    const existingBg = structure.elements.find(e => e.id === 'photo_bg_overlay')
+    if (existingBg) {
+      setError('Imagem original já está como fundo. Use o editor pra ajustar opacidade.')
+      return
+    }
+    const newEl: any = {
+      id: 'photo_bg_overlay',
+      type: 'image_static',
+      x: 0, y: 0, width: 100, height: 100,
+      zIndex: 1, // just above background, below everything else
+      src: imageDataUrl,
+      objectFit: 'cover',
+      opacity: 0.35,
+      alt: 'Imagem original como fundo (opacidade reduzida)',
+    }
+    setStructure({
+      ...structure,
+      elements: [...structure.elements, newEl],
+    })
+  }
+
   async function save(goToEditor: boolean) {
     if (!structure) return
     if (!name.trim()) { setError('Dê um nome ao template'); return }
@@ -363,6 +394,19 @@ export default function CreateTemplateFromImagePage() {
                   <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/20">
                     {structure.elements.length} elemento{structure.elements.length === 1 ? '' : 's'}
                   </span>
+                </div>
+
+                <div className="mt-4 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <p className="text-[10px] text-amber-300/90 mb-2 leading-relaxed">
+                    💡 Se a IA perdeu uma foto de fundo ou textura, use a imagem original como camada de fundo (35% opacidade):
+                  </p>
+                  <button
+                    onClick={useOriginalAsBackground}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] glass hover:bg-white/10 text-amber-200 border border-amber-500/30"
+                    type="button"
+                  >
+                    🖼️ Usar imagem original como fundo
+                  </button>
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2">
