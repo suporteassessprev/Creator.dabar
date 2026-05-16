@@ -77,9 +77,31 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
   const segments = parseAccentSegments(text)
   const accentColor = el.accentColor ?? '#facc15' // amber-400 default
   const hasBackground = !!el.background
+
+  /**
+   * Auto-fit heuristic. The base fontSize is what the admin set in the
+   * editor for the placeholder text. When the actual content (AI-generated
+   * or user-typed) is LONGER than the placeholder, the text overflows.
+   * We compute a shrink factor based on text length vs the rough character
+   * capacity of the element box. Result: long headlines auto-shrink rather
+   * than overflowing the canvas.
+   */
+  const baseFontPx  = el.fontSize ?? 32
+  const baseFontCqw = baseFontPx / 10.8
+  const lineHeightVal = el.lineHeight ?? 1.2
+  // Rough capacity heuristic: chars per line scales with element width;
+  // lines available scale with element height / font height.
+  const charsPerLine    = Math.max(1, (el.width * 0.85) / baseFontCqw)
+  const linesAvailable  = Math.max(1, (el.height * 0.9) / (baseFontCqw * lineHeightVal * 1.1))
+  const charCapacity    = charsPerLine * linesAvailable
+  // Use plain text length for capacity calc (asterisks excluded).
+  const plainLen = segments.reduce((acc, s) => acc + s.text.length, 0)
+  const shrinkFactor = Math.min(1, Math.sqrt(charCapacity / Math.max(plainLen, 1)))
+  const effectiveFontCqw = baseFontCqw * shrinkFactor
+
   const style: CSSProperties = {
     fontFamily: el.fontFamily ?? 'Inter, system-ui, sans-serif',
-    fontSize: `${(el.fontSize ?? 32) / 10.8}cqw`,
+    fontSize: `${effectiveFontCqw}cqw`,
     fontWeight: el.fontWeight ?? 700,
     color: el.color ?? '#ffffff',
     textAlign: el.align ?? 'center',

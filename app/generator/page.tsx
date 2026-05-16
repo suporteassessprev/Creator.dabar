@@ -155,11 +155,15 @@ export default function ChatGeneratorPage() {
       return t.mode === 'carousel' || t.mode === 'both'
     })
     if (eligible.length === 0) return null
-    if (templateMode === 'random') {
-      return eligible[Math.floor(Math.random() * eligible.length)]
-    }
-    // 'auto' — let IA decide (for now, also random; in future: by tema/audience match)
-    return eligible[Math.floor(Math.random() * eligible.length)]
+
+    // STRONG preference for templates WITH structure (the new visual
+    // ones). Legacy templates (structure=NULL) put the AI image at the
+    // bottom via SlidePreview, which is ugly. Templates with structure
+    // place the image inside the image_slot defined by the admin.
+    const withStructure = eligible.filter(t => !!t.structure)
+    const pool = withStructure.length > 0 ? withStructure : eligible
+
+    return pool[Math.floor(Math.random() * pool.length)]
   }
 
   const updateStep = useCallback((id: string, status: GenerationStep['status'], newLabel?: string) => {
