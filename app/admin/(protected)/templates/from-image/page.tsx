@@ -117,9 +117,19 @@ export default function CreateTemplateFromImagePage() {
       setAiPreviewThumbnail(data.previewImage ?? null)
       setAiPreviewPrompt(data.previewImagePrompt ?? null)
       setPhase('preview')
-      // Kick off preview images in parallel for every image_slot — admin
-      // sees the template with real images instead of placeholder cinza.
-      void generatePreviewsForSlots(data.structure)
+
+      // If the structure has image_slots AND we generated a thumbnail,
+      // auto-fill ALL image_slots with the thumbnail so admin sees the
+      // template populated with the AI-generated visual immediately.
+      const slots = (data.structure.elements || []).filter((e: any) => e.type === 'image_slot')
+      if (data.previewImage && slots.length > 0) {
+        const initialPreviews: Record<string, string> = {}
+        for (const s of slots) initialPreviews[s.id] = data.previewImage
+        setSlotPreviews(initialPreviews)
+      } else {
+        // Fall back to per-slot AI generation (more variety, slower)
+        void generatePreviewsForSlots(data.structure)
+      }
     } catch (e: any) {
       setError(e.message ?? 'Erro ao analisar imagem')
       setPhase('error')
@@ -161,34 +171,79 @@ export default function CreateTemplateFromImagePage() {
   }
 
   /**
-   * Quick-fix: when the AI misses a photo background overlay, this lets
-   * the admin inject the original reference image as a full-canvas
-   * image_static with low opacity behind everything else. Useful for
-   * templates like the INSS-style ads where a faint photo of a person
-   * tints the gradient.
+   * Apply the AI thumbnail as a static image layer inside the canvas
+   * (covering the whole canvas with reduced opacity by default, but
+   * the admin can refine in the editor). Useful when the structure has
+   * no image_slot but the admin wants a visual reference.
    */
-  function useOriginalAsBackground() {
-    if (!structure || !imageDataUrl) return
-    // Check if we already added it
-    const existingBg = structure.elements.find(e => e.id === 'photo_bg_overlay')
-    if (existingBg) {
-      setError('Imagem original já está como fundo. Use o editor pra ajustar opacidade.')
+  function applyThumbnailAsLayer() {
+    if (!structure || !aiPreviewThumbnail) return
+    const existing = structure.elements.find(e => e.id === 'ai_thumb_layer')
+    if (existing) {
+      setError('Thumbnail já está aplicada como camada. Use o editor pra ajustar.')
       return
     }
     const newEl: any = {
-      id: 'photo_bg_overlay',
+      id: 'ai_thumb_layer',
       type: 'image_static',
       x: 0, y: 0, width: 100, height: 100,
-      zIndex: 1, // just above background, below everything else
-      src: imageDataUrl,
+      zIndex: 1, // just above background, below text
+      src: aiPreviewThumbnail,
       objectFit: 'cover',
-      opacity: 0.35,
-      alt: 'Imagem original como fundo (opacidade reduzida)',
+      opacity: 0.6,
+      alt: 'Thumbnail IA como camada de fundo',
     }
     setStructure({
       ...structure,
       elements: [...structure.elements, newEl],
     })
+  }
+
+  /**
+   * Generate a generic AI texture (subtle noise/gradient) and add as
+   * a low-opacity overlay. Useful for adding depth to flat backgrounds.
+   * Calls /api/generate-image with a fixed textural prompt.
+   */
+  const [generatingTexture, setGeneratingTexture] = useState(false)
+
+  async function generateTextureLayer() {
+    if (!structure) return
+    setGeneratingTexture(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: 'subtle abstract noise texture, soft grain pattern, dark grunge overlay, professional design texture, transparent, no text, no objects, abstract',
+          mode: 'creative',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Falha ao gerar textura')
+      if (!data.imageData) throw new Error('IA não retornou imagem')
+
+      // Remove existing texture if any (replace instead of stack)
+      const filtered = structure.elements.filter(e => e.id !== 'ai_texture_overlay')
+      const newEl: any = {
+        id: 'ai_texture_overlay',
+        type: 'image_static',
+        x: 0, y: 0, width: 100, height: 100,
+        zIndex: 99, // ON TOP of everything for texture effect
+        src: data.imageData,
+        objectFit: 'cover',
+        opacity: 0.18, // very subtle
+        alt: 'Textura IA',
+      }
+      setStructure({
+        ...structure,
+        elements: [...filtered, newEl],
+      })
+    } catch (e: any) {
+      setError(e.message ?? 'Erro ao gerar textura')
+    } finally {
+      setGeneratingTexture(false)
+    }
   }
 
   async function save(goToEditor: boolean) {
@@ -437,17 +492,32 @@ export default function CreateTemplateFromImagePage() {
                   </div>
                 )}
 
-                <div className="mt-4 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                  <p className="text-[10px] text-amber-300/90 mb-2 leading-relaxed">
-                    💡 Se a IA perdeu uma foto de fundo ou textura, use a imagem original como camada de fundo (35% opacidade):
-                  </p>
+                {/* Quick layer actions */}
+                <div className="mt-4 space-y-2">
+                  {aiPreviewThumbnail && (
+                    <button
+                      onClick={applyThumbnailAsLayer}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 text-purple-200 border border-purple-500/30 transition-all"
+                      type="button"
+                      title="Adiciona a thumbnail IA como uma camada (image_static) cobrindo o canvas a 60% opacidade"
+                    >
+                      <Sparkles size={11} />
+                      Aplicar thumbnail como camada na arte
+                    </button>
+                  )}
                   <button
-                    onClick={useOriginalAsBackground}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] glass hover:bg-white/10 text-amber-200 border border-amber-500/30"
+                    onClick={generateTextureLayer}
+                    disabled={generatingTexture}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[11px] glass hover:bg-white/10 text-cyan-200 border border-cyan-500/30 transition-all disabled:opacity-60"
                     type="button"
+                    title="Gera uma textura abstrata sutil com IA e aplica como overlay no topo (opacidade 18%) — dá profundidade ao design"
                   >
-                    🖼️ Usar imagem original como fundo
+                    {generatingTexture ? <Loader2 size={11} className="animate-spin" /> : '✨'}
+                    {generatingTexture ? 'Gerando textura...' : 'Gerar textura com IA'}
                   </button>
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    Camadas adicionadas ficam editáveis no editor (opacidade, posição, etc).
+                  </p>
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2">
