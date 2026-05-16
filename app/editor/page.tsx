@@ -5,9 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import SlidePreview from '@/components/SlidePreview'
 import TemplateRenderer from '@/components/TemplateRenderer'
+import EditableTemplateCanvas from '@/components/EditableTemplateCanvas'
 import ExportZipButton from '@/components/ExportZipButton'
 import { useAppStore, Slide, SlideLayout, CreativeFormat } from '@/lib/store'
-import { parseStructure } from '@/lib/template-structure'
+import { parseStructure, serializeStructure, type TemplateStructure } from '@/lib/template-structure'
 import {
   Save, Download, ChevronLeft, ChevronRight,
   Type, Palette, Image, Layout, Loader2,
@@ -113,10 +114,23 @@ function EditorContent() {
 
   const handleSave = () => {
     updateCarousel(carousel.id, {
-      slides: carousel.slides,
-      format: carousel.format,
-      status: 'ready',
+      slides:            carousel.slides,
+      format:            carousel.format,
+      status:            'ready',
+      templateStructure: carousel.templateStructure ?? null,
+      templateId:        carousel.templateId ?? null,
     })
+    // Best-effort persist to DB (fire-and-forget — UX doesn't block on it)
+    fetch(`/api/carousels/${carousel.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title:  carousel.title,
+        slides: carousel.slides,
+        style:  JSON.stringify(carousel.style),
+        status: 'ready',
+      }),
+    }).catch(() => {})
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -251,16 +265,17 @@ function EditorContent() {
               </div>
 
               {/* The actual slide.
-                  Phase 3: when the carousel carries a templateStructure
-                  from the generator, render via TemplateRenderer using
-                  the slide's title/subtitle/cta/imageUrl as content.
+                  Phase 3.3: when the carousel carries a templateStructure,
+                  render via EditableTemplateCanvas (drag + resize + select).
+                  Changes mutate carousel.templateStructure in memory; the
+                  user clicks "Salvar" to persist to DB.
                   Legacy carousels (no structure) use SlidePreview. */}
               <div ref={slideRef}>
                 {activeSlide && (() => {
                   const tpl = parseStructure(carousel.templateStructure ?? null)
                   if (tpl) {
                     return (
-                      <TemplateRenderer
+                      <EditableTemplateCanvas
                         structure={tpl}
                         content={{
                           headline: activeSlide.title,
@@ -268,7 +283,12 @@ function EditorContent() {
                           cta:      activeSlide.cta,
                           imageUrl: activeSlide.imageUrl,
                         }}
-                        showImageSlotHint={false}
+                        onStructureChange={(next: TemplateStructure) => {
+                          setCarousel({
+                            ...carousel,
+                            templateStructure: serializeStructure(next),
+                          })
+                        }}
                       />
                     )
                   }
