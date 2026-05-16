@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import SlidePreview from '@/components/SlidePreview'
+import TemplateRenderer from '@/components/TemplateRenderer'
 import {
   useAppStore,
   createNewCarousel,
@@ -14,6 +15,7 @@ import {
   CarouselMode,
 } from '@/lib/store'
 import { contentToSlides as buildSlides } from '@/lib/gemini'
+import { parseStructure } from '@/lib/template-structure'
 import {
   Sparkles, Zap, Loader2,
   AlertCircle, Settings2, Image as ImageIcon, Type,
@@ -75,10 +77,14 @@ function parsePalette(json: string | null): ParsedPalette | null {
   try { return JSON.parse(json) } catch { return null }
 }
 
-/* ─── Template mini-card ─────────────────────────────── */
+/* ─── Template card with real preview ───────────────── */
 function TemplateCard({
   template, selected, onSelect,
 }: { template: PublishedTemplate; selected: boolean; onSelect: () => void }) {
+  // Phase 3.1f: real template preview using TemplateRenderer when the
+  // template has a `structure`. Legacy templates (no structure) fall
+  // back to the palette-based color card.
+  const parsed = parseStructure(template.structure ?? null)
   const palette = parsePalette(template.palette)
   const bg      = palette?.bg     ?? '#0f172a'
   const accent  = palette?.accent ?? '#0ea5e9'
@@ -92,20 +98,36 @@ function TemplateCard({
           : 'border-white/10 hover:border-white/20'
       }`}
     >
-      <div className="h-16 relative" style={{ background: `linear-gradient(135deg, ${bg}, ${accent}55)` }}>
-        <div className="absolute inset-0 opacity-40"
-          style={{ background: `radial-gradient(circle at 70% 30%, ${accent}88, transparent 60%)` }} />
+      <div className="relative">
+        {parsed ? (
+          <div className="pointer-events-none">
+            <TemplateRenderer
+              structure={parsed}
+              content={{
+                headline: 'EXEMPLO DE HEADLINE',
+                subtitle: 'Subtítulo do template',
+                cta:      'SAIBA MAIS',
+              }}
+              showImageSlotHint={false}
+            />
+          </div>
+        ) : (
+          <div className="h-16" style={{ background: `linear-gradient(135deg, ${bg}, ${accent}55)` }}>
+            <div className="absolute inset-0 opacity-40"
+              style={{ background: `radial-gradient(circle at 70% 30%, ${accent}88, transparent 60%)` }} />
+          </div>
+        )}
         {selected && (
-          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center z-10">
             <span className="text-white text-[9px] font-bold">✓</span>
           </div>
         )}
       </div>
-      <div className="p-2" style={{ backgroundColor: bg + 'cc' }}>
-        <div className="text-[11px] font-bold truncate" style={{ color: bg === '#f8fafc' ? '#0f172a' : '#fff' }}>
+      <div className="p-2 bg-black/40 backdrop-blur-sm">
+        <div className="text-[11px] font-bold truncate text-white">
           {template.name}
         </div>
-        <div className="text-[9px] mt-0.5 opacity-70 truncate" style={{ color: bg === '#f8fafc' ? '#374151' : '#9ca3af' }}>
+        <div className="text-[9px] mt-0.5 opacity-70 truncate text-gray-300">
           {template.mode === 'creative' ? 'Criativo' : template.mode === 'carousel' ? 'Carrossel' : 'Ambos'}
           {' · '}
           {template.format === 'square' ? '1:1' : template.format === 'feed-vertical' ? '4:5' : '9:16'}
