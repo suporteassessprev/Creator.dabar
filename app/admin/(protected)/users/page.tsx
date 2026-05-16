@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import {
-  Users, Coins, Plus, Minus, Loader2, X, CheckCircle2, AlertCircle, RefreshCw,
+  Users, Coins, Plus, Minus, Loader2, X, CheckCircle2, AlertCircle, RefreshCw, Crown,
 } from 'lucide-react'
 
 interface AdminUser {
@@ -152,7 +152,13 @@ export default function AdminUsersPage() {
           onClose={() => setModalUser(null)}
           onGranted={(newBalance) => {
             setUsers(prev => prev.map(u => u.id === modalUser.id ? { ...u, credits: newBalance } : u))
-            setModalUser(null)
+          }}
+          onPlanChanged={(newPlanName, newPlanDisplayName) => {
+            setUsers(prev => prev.map(u =>
+              u.id === modalUser.id
+                ? { ...u, subscription: { plan: { name: newPlanName, displayName: newPlanDisplayName } } }
+                : u
+            ))
           }}
         />
       )}
@@ -160,18 +166,21 @@ export default function AdminUsersPage() {
   )
 }
 
-/* ─── Modal: grant/revoke credits ───────────────────────────────────── */
+/* ─── Modal: manage credits + plan ─────────────────────────────────── */
 function GrantCreditsModal({
-  user, onClose, onGranted,
+  user, onClose, onGranted, onPlanChanged,
 }: {
   user: AdminUser
   onClose: () => void
   onGranted: (newBalance: number) => void
+  onPlanChanged: (planName: string, planDisplayName: string) => void
 }) {
   const [amount, setAmount] = useState<number>(50)
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [changingPlan, setChangingPlan] = useState(false)
+  const currentPlanName = user.subscription?.plan?.name ?? 'free'
 
   async function submit(sign: 1 | -1) {
     setError(null)
@@ -190,7 +199,28 @@ function GrantCreditsModal({
       onGranted(data.balance)
     } catch (e: any) {
       setError(e.message ?? 'Erro')
+    } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function changePlan(planName: 'free' | 'pro' | 'business') {
+    if (planName === currentPlanName) return
+    setError(null)
+    setChangingPlan(true)
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planName }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+      onPlanChanged(data.plan.name, data.plan.displayName)
+    } catch (e: any) {
+      setError(e.message ?? 'Erro ao mudar plano')
+    } finally {
+      setChangingPlan(false)
     }
   }
 
@@ -284,6 +314,46 @@ function GrantCreditsModal({
             {submitting ? <Loader2 size={12} className="animate-spin" /> : <Minus size={12} />}
             Remover {amount}
           </button>
+        </div>
+
+        {/* Plan selector — separate concern from credits.
+            Free plan has 5 carousels/month hard limit independent of credits.
+            Promoting to Pro/Business lifts that limit. */}
+        <div className="mt-6 pt-5 border-t border-white/5">
+          <div className="flex items-center gap-2 mb-3">
+            <Crown size={14} className="text-orange-400" />
+            <h3 className="text-sm font-semibold">Plano do usuário</h3>
+          </div>
+          <p className="text-[10px] text-gray-500 mb-3 leading-relaxed">
+            Plano <strong>Free</strong> tem limite de 5 carrosséis/mês (independente de créditos).
+            Promover pra Pro/Business remove o limite e mantém os créditos atuais.
+            <br/>
+            ⚠️ Mudança é local — <strong>NÃO toca no Stripe</strong>. Use apenas pra testes/cortesias.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {(['free', 'pro', 'business'] as const).map(p => {
+              const isCurrent = currentPlanName === p
+              return (
+                <button
+                  key={p}
+                  onClick={() => changePlan(p)}
+                  disabled={changingPlan || isCurrent}
+                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-all border ${
+                    isCurrent
+                      ? p === 'business' ? 'bg-orange-500/30 text-orange-200 border-orange-500/50 cursor-default' :
+                        p === 'pro'      ? 'bg-blue-500/30   text-blue-200   border-blue-500/50   cursor-default' :
+                                           'bg-white/10        text-gray-300   border-white/20      cursor-default'
+                      : 'glass hover:bg-white/10 text-gray-300 border-white/10 disabled:opacity-60'
+                  }`}
+                  type="button"
+                >
+                  {changingPlan && !isCurrent ? <Loader2 size={11} className="animate-spin inline mr-1" /> : null}
+                  {p === 'free' ? 'Free' : p === 'pro' ? 'Pro' : 'Business'}
+                  {isCurrent && <span className="block text-[9px] opacity-70 mt-0.5">atual</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
