@@ -82,16 +82,22 @@ export async function POST(req: NextRequest) {
       systemInstruction: SYSTEM_PROMPT(mode),
     })
 
-    // Convert messages to Gemini format (user/model alternating).
-    // We invert assistant→model.
-    const history = messages.slice(0, -1).map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }],
-    }))
+    // Convert messages to Gemini format. Gemini requires history to
+    // START with a 'user' role. The frontend often prepends an
+    // assistant greeting bubble that exists ONLY for UX — we strip
+    // those leading assistant messages here before passing to the API.
     const lastMessage = messages[messages.length - 1]
     if (lastMessage.role !== 'user') {
       return NextResponse.json({ error: 'última mensagem deve ser do user' }, { status: 400 })
     }
+    const rawHistory = messages.slice(0, -1)
+    // Drop leading assistant messages until we hit a user (or empty)
+    let startIdx = 0
+    while (startIdx < rawHistory.length && rawHistory[startIdx].role !== 'user') startIdx++
+    const history = rawHistory.slice(startIdx).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content }],
+    }))
 
     const chat = model.startChat({ history })
     const result = await chat.sendMessage(lastMessage.content)
