@@ -79,10 +79,18 @@ TIPOS DE ELEMENTO:
 4. text_cta — Botão pílula com background + padding + borderRadius. Ex: "Clique em saiba mais".
 5. badge — Pílula pequena decorativa.
 6. account_badge — Avatar circular + @handle.
-7. image_static — Imagem FIXA (foto, mockup, logo). src: "PLACEHOLDER".
-8. image_slot — APENAS placeholder pra imagem futura genérica. Description explicativa.
+7. **image_slot — PRIORIDADE pra QUALQUER FOTO/IMAGEM principal do template** (ex: pessoa, paisagem, produto, mockup do app, scene). Em templates virais, ESSAS imagens são VARIÁVEIS — o usuário vai gerar a SUA imagem com IA. SEMPRE prefira image_slot sobre image_static quando vir uma foto principal.
+   - Description em PORTUGUÊS descrevendo a foto que será gerada (ex: "Mulher jovem grávida em ambiente acolhedor, tons rosa/magenta")
+   - Cobrir a área inteira onde a foto fica (top, fullbleed, card lateral, etc)
+8. image_static — APENAS pra LOGOS DE MARCA FIXOS, MOCKUPS DE APP SUPER ESPECÍFICOS, decorações que NUNCA mudam (ex: ícone do Instagram, logo da empresa). Quase nunca use isso pra fotos de pessoas/cenas.
 9. icon — Ícone vetorial. iconName de: ${ICON_NAMES.join(', ')}.
 10. shape — Retângulo/círculo decorativo. Pode ter borderColor (cantos coloridos como em advocacia).
+
+🚨 REGRA CRÍTICA — image_slot vs image_static:
+- Foto de pessoa, paisagem, produto, cena → SEMPRE image_slot (variável)
+- Logo de marca (Instagram, LEGO, FIFA) → image_static
+- Mockup de tela com texto específico não trocável → image_static
+- Em dúvida → image_slot (mais útil pro usuário)
 
 CAMPOS:
 - text_*: { placeholder, fontFamily, fontSize, fontWeight, color, accentColor?, align, lineHeight, background?, borderRadius?, paddingX?, paddingY? }
