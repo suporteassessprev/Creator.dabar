@@ -1,60 +1,50 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+/**
+ * Phase 3.2 — Chat-style generator.
+ *
+ * New UX: user talks to an AI to describe what they want, AI asks
+ * follow-ups, then transitions to cosmic-style animated generation.
+ *
+ * State machine:
+ *   mode-select → chat → generating → done (redirect to editor)
+ *
+ * The classic form-based generator is still available at /generator/classic
+ * as a fallback.
+ */
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import AppLayout from '@/components/AppLayout'
-import SlidePreview from '@/components/SlidePreview'
 import TemplateRenderer from '@/components/TemplateRenderer'
 import {
   useAppStore,
   createNewCarousel,
   createSlide,
-  Slide,
-  SlideLayout,
-  CreativeFormat,
   CarouselMode,
 } from '@/lib/store'
 import { contentToSlides as buildSlides } from '@/lib/gemini'
 import { parseStructure } from '@/lib/template-structure'
 import {
-  Sparkles, Zap, Loader2,
-  AlertCircle, Settings2, Image as ImageIcon, Type,
-  LayoutGrid, Megaphone, Square, RectangleVertical, Smartphone,
-  ChevronDown, ChevronUp, LayoutTemplate, X,
+  Sparkles, Megaphone, LayoutGrid, Send, Loader2, ArrowLeft,
+  Shuffle, Image as ImageIcon, X, Wand2,
 } from 'lucide-react'
 
-/* ─── Constants ─────────────────────────────────────── */
-const TONES = [
-  { value: 'viral',        label: '🔥 Viral',        desc: 'Para parar o scroll' },
-  { value: 'educativo',    label: '📚 Educativo',     desc: 'Ensinar e informar'  },
-  { value: 'motivacional', label: '💪 Motivacional',  desc: 'Inspirar e engajar'  },
-  { value: 'profissional', label: '💼 Profissional',  desc: 'Autoridade'           },
-  { value: 'humoristico',  label: '😄 Humor',         desc: 'Leve e divertido'    },
-]
+type Phase = 'mode-select' | 'chat' | 'generating' | 'done'
 
-const THEMES = [
-  { value: 'dark',     label: 'Dark',    bg: '#0f172a', accent: '#0ea5e9' },
-  { value: 'gradient', label: 'Magenta', bg: '#1a0533', accent: '#d946ef' },
-  { value: 'light',    label: 'Light',   bg: '#f8fafc', accent: '#0ea5e9' },
-  { value: 'minimal',  label: 'Gold',    bg: '#111827', accent: '#f59e0b' },
-  { value: 'red',      label: 'Red',     bg: '#1f0d0d', accent: '#ef4444' },
-  { value: 'green',    label: 'Green',   bg: '#0d1f12', accent: '#22c55e' },
-] as const
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
 
-const FORMATS: { value: CreativeFormat; label: string; icon: any; ratio: string }[] = [
-  { value: 'square',        label: 'Feed 1:1',  icon: Square,            ratio: '1080×1080' },
-  { value: 'feed-vertical', label: 'Feed 4:5',  icon: RectangleVertical, ratio: '1080×1350' },
-  { value: 'story',         label: 'Story 9:16',icon: Smartphone,        ratio: '1080×1920' },
-]
+interface Intent {
+  tema: string
+  audience: string
+  tone: string
+  slideCount: number
+  extraContext: string | null
+}
 
-const LAYOUTS: { value: SlideLayout; label: string; desc: string }[] = [
-  { value: 'headline-banner',    label: 'Headline + Faixa',  desc: 'Título com box colorido'     },
-  { value: 'split-horizontal',   label: 'Split horizontal',   desc: 'Texto cima / imagem baixo'   },
-  { value: 'dark-overlay',       label: 'Overlay escuro',     desc: 'Imagem cheia, texto na base' },
-  { value: 'centered-brutalist', label: 'Centralizado',       desc: 'Texto no centro com bordas'  },
-]
-
-/* ─── Published template type ───────────────────────── */
 interface PublishedTemplate {
   id: string
   name: string
@@ -64,233 +54,262 @@ interface PublishedTemplate {
   layout: string
   style: string | null
   palette: string | null
-  structure?: string | null  // Phase 3: visual template JSON, may be null for legacy
+  structure?: string | null
 }
 
-interface ParsedPalette {
-  value?: string; label?: string
-  bg: string; accent: string; text?: string; theme?: string
+interface GenerationStep {
+  id: string
+  label: string
+  status: 'pending' | 'running' | 'done' | 'error'
 }
 
-function parsePalette(json: string | null): ParsedPalette | null {
-  if (!json) return null
-  try { return JSON.parse(json) } catch { return null }
-}
-
-/* ─── Template card with real preview ───────────────── */
-function TemplateCard({
-  template, selected, onSelect,
-}: { template: PublishedTemplate; selected: boolean; onSelect: () => void }) {
-  // Phase 3.1f: real template preview using TemplateRenderer when the
-  // template has a `structure`. Legacy templates (no structure) fall
-  // back to the palette-based color card.
-  const parsed = parseStructure(template.structure ?? null)
-  const palette = parsePalette(template.palette)
-  const bg      = palette?.bg     ?? '#0f172a'
-  const accent  = palette?.accent ?? '#0ea5e9'
-
-  return (
-    <button
-      onClick={onSelect}
-      className={`flex-shrink-0 w-36 rounded-xl overflow-hidden border transition-all text-left ${
-        selected
-          ? 'border-blue-500 ring-2 ring-blue-500/30 scale-105'
-          : 'border-white/10 hover:border-white/20'
-      }`}
-    >
-      <div className="relative">
-        {parsed ? (
-          <div className="pointer-events-none">
-            <TemplateRenderer
-              structure={parsed}
-              content={{
-                headline: 'EXEMPLO DE HEADLINE',
-                subtitle: 'Subtítulo do template',
-                cta:      'SAIBA MAIS',
-              }}
-              showImageSlotHint={false}
-            />
-          </div>
-        ) : (
-          <div className="h-16" style={{ background: `linear-gradient(135deg, ${bg}, ${accent}55)` }}>
-            <div className="absolute inset-0 opacity-40"
-              style={{ background: `radial-gradient(circle at 70% 30%, ${accent}88, transparent 60%)` }} />
-          </div>
-        )}
-        {selected && (
-          <div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center z-10">
-            <span className="text-white text-[9px] font-bold">✓</span>
-          </div>
-        )}
-      </div>
-      <div className="p-2 bg-black/40 backdrop-blur-sm">
-        <div className="text-[11px] font-bold truncate text-white">
-          {template.name}
-        </div>
-        <div className="text-[9px] mt-0.5 opacity-70 truncate text-gray-300">
-          {template.mode === 'creative' ? 'Criativo' : template.mode === 'carousel' ? 'Carrossel' : 'Ambos'}
-          {' · '}
-          {template.format === 'square' ? '1:1' : template.format === 'feed-vertical' ? '4:5' : '9:16'}
-        </div>
-      </div>
-    </button>
-  )
-}
-
-/* ─── Main page ──────────────────────────────────────── */
-export default function GeneratorPage() {
+export default function ChatGeneratorPage() {
   const router = useRouter()
   const { addCarousel, setCurrentCarousel, setIsGenerating } = useAppStore()
 
-  const [mode,           setMode]           = useState<CarouselMode>('creative')
-  const [topic,          setTopic]          = useState('')
-  const [slideCount,     setSlideCount]     = useState(7)
-  const [tone,           setTone]           = useState('viral')
-  const [audience,       setAudience]       = useState('empreendedores e criadores de conteúdo')
-  const [selectedTheme,  setSelectedTheme]  = useState<typeof THEMES[number]>(THEMES[0])
-  const [format,         setFormat]         = useState<CreativeFormat>('square')
-  const [layout,         setLayout]         = useState<SlideLayout>('headline-banner')
-  const [generateImages, setGenerateImages] = useState(true)
+  const [phase, setPhase] = useState<Phase>('mode-select')
+  const [mode,  setMode]  = useState<CarouselMode>('creative')
 
-  const [isLoading, setIsLoading] = useState(false)
-  const [progress,  setProgress]  = useState<{ step: string; value: number } | null>(null)
-  const [error,     setError]     = useState('')
+  // Chat state
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
 
-  // Template selector
-  const [templates,          setTemplates]          = useState<PublishedTemplate[]>([])
-  const [templatesLoading,   setTemplatesLoading]   = useState(false)
-  const [selectedTemplate,   setSelectedTemplate]   = useState<PublishedTemplate | null>(null)
-  const [templatesPanelOpen, setTemplatesPanelOpen] = useState(false)
+  // Template choice
+  const [templateMode, setTemplateMode] = useState<'auto' | 'random' | 'manual'>('auto')
+  const [selectedTemplate, setSelectedTemplate] = useState<PublishedTemplate | null>(null)
+  const [templates, setTemplates] = useState<PublishedTemplate[]>([])
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
 
+  // Generation state
+  const [steps, setSteps] = useState<GenerationStep[]>([])
+  const [intent, setIntent] = useState<Intent | null>(null)
+  const [genError, setGenError] = useState<string | null>(null)
+
+  // Load templates on mount
   useEffect(() => {
-    setTemplatesLoading(true)
-    fetch(`/api/templates?mode=${mode}`)
-      .then(r => r.json())
-      .then((data: PublishedTemplate[]) => {
-        setTemplates(Array.isArray(data) ? data : [])
-        if (selectedTemplate && selectedTemplate.mode !== mode && selectedTemplate.mode !== 'both') {
-          setSelectedTemplate(null)
-        }
-      })
-      .catch(() => setTemplates([]))
-      .finally(() => setTemplatesLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode])
+    fetch('/api/templates').then(r => r.ok ? r.json() : []).then(d => {
+      if (Array.isArray(d)) setTemplates(d)
+    }).catch(() => {})
+  }, [])
 
-  function applyTemplate(t: PublishedTemplate) {
-    setSelectedTemplate(t)
-    setTemplatesPanelOpen(false)
-    const fmt = t.format as CreativeFormat
-    if (['square','feed-vertical','story'].includes(fmt)) setFormat(fmt)
-    const validLayouts: SlideLayout[] = ['headline-banner','split-horizontal','dark-overlay','centered-brutalist','centered','top','bottom','split']
-    if (validLayouts.includes(t.layout as SlideLayout)) setLayout(t.layout as SlideLayout)
-    const palette = parsePalette(t.palette)
-    if (palette) {
-      const match = THEMES.find(th => th.bg === palette.bg && th.accent === palette.accent)
-        ?? THEMES.find(th => th.accent === palette.accent)
-        ?? THEMES[0]
-      setSelectedTheme(match)
+  // Auto-scroll chat
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [messages])
+
+  function startMode(m: CarouselMode) {
+    setMode(m)
+    const greeting = m === 'carousel'
+      ? 'Beleza! Vamos criar um carrossel viral. O que você quer postar?'
+      : 'Beleza! Vamos criar um criativo de anúncio. O que você quer divulgar?'
+    setMessages([{ role: 'assistant', content: greeting }])
+    setPhase('chat')
+  }
+
+  async function sendMessage() {
+    if (!input.trim() || sending) return
+    const userMsg: ChatMessage = { role: 'user', content: input.trim() }
+    const nextMessages = [...messages, userMsg]
+    setMessages(nextMessages)
+    setInput('')
+    setSending(true)
+
+    try {
+      const res = await fetch('/api/chat/intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, messages: nextMessages }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
+
+      if (data.type === 'question') {
+        setMessages([...nextMessages, { role: 'assistant', content: data.message }])
+      } else if (data.type === 'intent') {
+        // Add a confirmation message then transition to generating
+        setMessages([...nextMessages, {
+          role: 'assistant',
+          content: `Entendi. Vou criar agora: ${data.intent.tema} pra ${data.intent.audience}. ✨`,
+        }])
+        setIntent(data.intent)
+        setTimeout(() => runGeneration(data.intent), 700)
+      }
+    } catch (e: any) {
+      setMessages([...nextMessages, {
+        role: 'assistant',
+        content: `Erro: ${e.message}. Tenta de novo.`,
+      }])
+    } finally {
+      setSending(false)
     }
   }
 
-  const handleGenerate = async () => {
-    if (!topic.trim()) { setError('Digite o tema'); return }
+  function pickTemplate(): PublishedTemplate | null {
+    if (templateMode === 'manual') return selectedTemplate
+    const eligible = templates.filter(t => {
+      if (mode === 'creative') return t.mode === 'creative' || t.mode === 'both'
+      return t.mode === 'carousel' || t.mode === 'both'
+    })
+    if (eligible.length === 0) return null
+    if (templateMode === 'random') {
+      return eligible[Math.floor(Math.random() * eligible.length)]
+    }
+    // 'auto' — let IA decide (for now, also random; in future: by tema/audience match)
+    return eligible[Math.floor(Math.random() * eligible.length)]
+  }
 
-    setError('')
-    setIsLoading(true)
+  const updateStep = useCallback((id: string, status: GenerationStep['status'], newLabel?: string) => {
+    setSteps(prev => prev.map(s =>
+      s.id === id ? { ...s, status, label: newLabel ?? s.label } : s
+    ))
+  }, [])
+
+  async function runGeneration(it: Intent) {
+    setIntent(it)
     setIsGenerating(true)
-    setProgress({ step: '✍️ Gerando copy...', value: 20 })
+    setGenError(null)
+    setPhase('generating')
+
+    const template = pickTemplate()
+
+    // Build initial steps list
+    const baseSteps: GenerationStep[] = [
+      { id: 'understand', label: 'Entendendo seu tema...',         status: 'running' },
+      { id: 'template',   label: 'Escolhendo template visual...',  status: 'pending' },
+      { id: 'copy',       label: 'Escrevendo headlines virais...', status: 'pending' },
+    ]
+    if (mode === 'carousel') {
+      for (let i = 1; i <= it.slideCount; i++) {
+        baseSteps.push({ id: `img-${i}`, label: `Gerando imagem do slide ${i}/${it.slideCount}...`, status: 'pending' })
+      }
+    } else {
+      baseSteps.push({ id: 'img-1', label: 'Gerando imagem do anúncio...', status: 'pending' })
+    }
+    baseSteps.push({ id: 'final', label: 'Montando criativo final...', status: 'pending' })
+    setSteps(baseSteps)
 
     try {
-      const style = {
-        primaryColor:    selectedTheme.accent,
-        secondaryColor:  '#d946ef',
-        backgroundColor: selectedTheme.bg,
-        textColor:       selectedTheme.bg === '#f8fafc' ? '#0f172a' : '#ffffff',
-        fontFamily:      'Inter',
-        theme: (['dark','light','gradient','minimal'].includes(selectedTheme.value)
-          ? selectedTheme.value : 'dark') as 'dark' | 'light' | 'gradient' | 'minimal',
-      }
+      // Step 1: understand (a small artificial delay so user sees the animation)
+      await new Promise(r => setTimeout(r, 600))
+      updateStep('understand', 'done')
 
-      const res = await fetch('/api/generate', {
+      // Step 2: template
+      updateStep('template', 'running', template ? `Usando template "${template.name}"...` : 'Sem template, gerando do zero...')
+      await new Promise(r => setTimeout(r, 400))
+      updateStep('template', 'done')
+
+      // Style from template or fallback
+      let style: any
+      if (template) {
+        try {
+          const palette = template.palette ? JSON.parse(template.palette) : null
+          style = {
+            primaryColor:    palette?.accent ?? '#0ea5e9',
+            secondaryColor:  '#d946ef',
+            backgroundColor: palette?.bg ?? '#0f172a',
+            textColor:       palette?.bg === '#f8fafc' ? '#0f172a' : '#ffffff',
+            fontFamily:      'Inter',
+            theme:           palette?.theme ?? 'dark',
+          }
+        } catch { /* fallback below */ }
+      }
+      if (!style) {
+        style = {
+          primaryColor:    '#0ea5e9',
+          secondaryColor:  '#d946ef',
+          backgroundColor: '#0f172a',
+          textColor:       '#ffffff',
+          fontFamily:      'Inter',
+          theme:           'dark',
+        }
+      }
+      const format = template?.format ?? 'square'
+
+      // Step 3: copy
+      updateStep('copy', 'running')
+      const copyRes = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode, topic,
-          slideCount: mode === 'carousel' ? slideCount : 1,
-          style, tone,
-          targetAudience: audience,
+          mode,
+          topic: it.tema,
+          slideCount: it.slideCount,
+          style,
+          tone: it.tone,
+          targetAudience: it.audience,
         }),
       })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.error || 'Erro ao gerar conteúdo')
+      if (!copyRes.ok) {
+        const err = await copyRes.json()
+        throw new Error(err.error || 'Erro ao gerar copy')
       }
+      const copyData = await copyRes.json()
+      updateStep('copy', 'done')
 
-      const data = await res.json()
-      setProgress({ step: '🎨 Montando criativo...', value: 50 })
-
-      const carousel = createNewCarousel(topic, { style, format, mode })
+      // Build carousel object
+      const carousel = createNewCarousel(it.tema, { style, format: format as any, mode })
       carousel.style = style
-
-      // Phase 3: if a visual template is selected, carry its structure +
-      // id onto the carousel. The editor renders via TemplateRenderer
-      // when this is set; otherwise falls back to the legacy slide layout.
-      if (selectedTemplate?.structure) {
-        carousel.templateStructure = selectedTemplate.structure
-        carousel.templateId = selectedTemplate.id
+      if (template?.structure) {
+        carousel.templateStructure = template.structure
+        carousel.templateId = template.id
       } else {
         carousel.templateStructure = null
-        carousel.templateId = selectedTemplate?.id ?? null
+        carousel.templateId = template?.id ?? null
       }
 
-      if (data.mode === 'creative' && data.creative) {
-        carousel.title  = data.creative.headline
-        carousel.slides = [
-          createSlide({
-            title: data.creative.headline, subtitle: data.creative.subtitle,
-            content: data.creative.subtitle, cta: data.creative.cta,
-            imagePrompt: data.creative.imagePrompt,
-            backgroundColor: style.backgroundColor, textColor: style.textColor,
-            accentColor: style.primaryColor, fontFamily: style.fontFamily, layout,
-          }),
-        ]
+      if (copyData.mode === 'creative' && copyData.creative) {
+        carousel.title = copyData.creative.headline
+        carousel.slides = [createSlide({
+          title:    copyData.creative.headline,
+          subtitle: copyData.creative.subtitle,
+          content:  copyData.creative.subtitle,
+          cta:      copyData.creative.cta,
+          imagePrompt: copyData.creative.imagePrompt,
+          backgroundColor: style.backgroundColor,
+          textColor:       style.textColor,
+          accentColor:     style.primaryColor,
+          fontFamily:      style.fontFamily,
+          layout: 'headline-banner',
+        })]
       } else {
-        carousel.title  = data.title || topic
-        carousel.slides = buildSlides(data.slides, style)
+        carousel.title = copyData.title || it.tema
+        carousel.slides = buildSlides(copyData.slides, style)
       }
 
-      if (generateImages) {
-        setProgress({ step: '🖼️ Gerando imagem com IA...', value: 60 })
-        for (let i = 0; i < carousel.slides.length; i++) {
-          const slide = carousel.slides[i]
-          if (slide.imagePrompt) {
-            try {
-              const imgRes = await fetch('/api/generate-image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: slide.imagePrompt }),
-              })
-              if (imgRes.ok) {
-                const { imageData } = await imgRes.json()
-                carousel.slides[i] = { ...slide, imageUrl: imageData }
-              }
-            } catch {}
-            setProgress({
-              step:  `🖼️ Imagem ${i + 1}/${carousel.slides.length}...`,
-              value: 60 + Math.round(((i + 1) / carousel.slides.length) * 30),
+      // Step 4+: generate image per slide
+      for (let i = 0; i < carousel.slides.length; i++) {
+        const slide = carousel.slides[i]
+        const stepId = `img-${i + 1}`
+        updateStep(stepId, 'running')
+        if (slide.imagePrompt) {
+          try {
+            const imgRes = await fetch('/api/generate-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: slide.imagePrompt, mode }),
             })
+            if (imgRes.ok) {
+              const { imageData } = await imgRes.json()
+              if (imageData) carousel.slides[i] = { ...slide, imageUrl: imageData }
+            }
+          } catch {
+            // continue with other slides
           }
         }
+        updateStep(stepId, 'done')
       }
 
+      // Final
+      updateStep('final', 'running')
       carousel.status = 'ready'
-      setProgress({ step: '✅ Pronto!', value: 100 })
       addCarousel(carousel)
       setCurrentCarousel(carousel)
 
-      // Fire-and-forget: persist to DB (doesn't block the UI)
+      // Persist to DB (fire-and-forget)
       fetch('/api/carousels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -304,368 +323,455 @@ export default function GeneratorPage() {
           status: carousel.status,
           slides: carousel.slides,
         }),
-      }).catch(() => { /* DB save failed — localStorage is the fallback */ })
+      }).catch(() => {})
 
-      setTimeout(() => { router.push(`/editor?id=${carousel.id}`) }, 600)
-    } catch (err: any) {
-      setError(err.message || 'Erro inesperado. Tente novamente.')
-      setProgress(null)
-    } finally {
-      setIsLoading(false)
+      updateStep('final', 'done')
+      setPhase('done')
+
+      // Brief celebration before redirecting
+      setTimeout(() => {
+        setIsGenerating(false)
+        router.push(`/editor?id=${carousel.id}`)
+      }, 1200)
+    } catch (e: any) {
+      setGenError(e.message ?? 'Erro inesperado')
       setIsGenerating(false)
     }
   }
 
-  const previewSlide: Slide = {
-    id: 'preview',
-    title:    topic || 'TITULO IMPACTANTE',
-    subtitle: 'Subtítulo gerado pela IA',
-    content:  'Subtítulo gerado pela IA',
-    cta:      'QUERO SABER MAIS',
-    backgroundColor: selectedTheme.bg,
-    textColor:       selectedTheme.bg === '#f8fafc' ? '#0f172a' : '#ffffff',
-    accentColor:     selectedTheme.accent,
-    fontFamily:      'Inter',
-    layout,
-  }
-
   return (
     <AppLayout>
-      <div className="p-8 max-w-6xl mx-auto">
-        {/* Title */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-black mb-2">
-            <span className="gradient-text">
-              {mode === 'creative' ? 'Novo Criativo de Anúncio' : 'Novo Carrossel'}
-            </span>
-          </h1>
-          <p className="text-gray-400 text-sm">
-            {mode === 'creative'
-              ? 'Gere imagem de fundo + copy posicionada em layouts virais'
-              : 'Crie um carrossel viral com múltiplos slides'}
-          </p>
-        </div>
+      <div className="min-h-screen relative overflow-hidden">
+        {/* Cosmic background — particles + gradient */}
+        <CosmicBackground active={phase === 'generating' || phase === 'done'} />
 
-        {/* Mode toggle */}
-        <div className="glass rounded-2xl p-2 mb-6 flex gap-2">
-          {([
-            { v: 'creative', icon: Megaphone, label: 'Criativo de Anúncio' },
-            { v: 'carousel', icon: LayoutGrid,  label: 'Carrossel'            },
-          ] as const).map(({ v, icon: Icon, label }) => (
-            <button key={v} onClick={() => setMode(v)}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${
-                mode === v
-                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              <Icon size={16} /> {label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── Template selector ── */}
-        <div className="glass rounded-2xl mb-6 overflow-hidden border border-white/5">
-          <button
-            onClick={() => setTemplatesPanelOpen(v => !v)}
-            className="w-full flex items-center gap-3 px-5 py-4 hover:bg-white/5 transition-colors"
-          >
-            <LayoutTemplate size={16} className="text-purple-400 flex-shrink-0" />
-            <span className="text-sm font-semibold flex-1 text-left">
-              {selectedTemplate ? (
-                <span className="flex items-center gap-2 flex-wrap">
-                  Template selecionado:
-                  <span className="text-blue-400">{selectedTemplate.name}</span>
-                  <span className="text-[10px] font-normal text-gray-500">(clique para trocar)</span>
-                </span>
-              ) : (
-                <span>
-                  Usar Template Visual{' '}
-                  {templates.length > 0 && (
-                    <span className="text-[10px] font-normal text-gray-500">
-                      — {templates.length} disponíveis
-                    </span>
-                  )}
-                </span>
-              )}
-            </span>
-            {selectedTemplate && (
-              <span
-                role="button"
-                onClick={e => { e.stopPropagation(); setSelectedTemplate(null) }}
-                className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10"
-              >
-                <X size={14} />
-              </span>
-            )}
-            {templatesPanelOpen
-              ? <ChevronUp size={16} className="text-gray-400 flex-shrink-0" />
-              : <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />}
-          </button>
-
-          {templatesPanelOpen && (
-            <div className="border-t border-white/5 px-5 pb-5 pt-4">
-              {templatesLoading ? (
-                <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
-                  <Loader2 size={14} className="animate-spin" /> Carregando templates...
-                </div>
-              ) : templates.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-gray-500 text-sm mb-1">Nenhum template publicado para este modo</p>
-                  <p className="text-gray-600 text-xs">
-                    Crie e publique templates no{' '}
-                    <a href="/admin/templates" className="text-blue-400 hover:underline">painel admin</a>
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Escolha um template para aplicar layout, paleta e formato automaticamente.
-                    Você ainda pode ajustar qualquer campo abaixo.
-                  </p>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {/* Custom option */}
-                    <button
-                      onClick={() => { setSelectedTemplate(null); setTemplatesPanelOpen(false) }}
-                      className={`flex-shrink-0 w-36 rounded-xl overflow-hidden border transition-all text-left ${
-                        !selectedTemplate
-                          ? 'border-blue-500 ring-2 ring-blue-500/30 scale-105'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="h-16 flex items-center justify-center bg-white/5">
-                        <Settings2 size={24} className="text-gray-400" />
-                      </div>
-                      <div className="p-2 bg-white/3">
-                        <div className="text-[11px] font-bold text-gray-300">Personalizado</div>
-                        <div className="text-[9px] text-gray-500 mt-0.5">Configurar manualmente</div>
-                      </div>
-                    </button>
-
-                    {templates.map(t => (
-                      <TemplateCard
-                        key={t.id}
-                        template={t}
-                        selected={selectedTemplate?.id === t.id}
-                        onSelect={() => applyTemplate(t)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+        <AnimatePresence mode="wait">
+          {phase === 'mode-select' && (
+            <ModeSelectView key="mode" onSelect={startMode} />
           )}
-        </div>
+          {phase === 'chat' && (
+            <ChatView
+              key="chat"
+              mode={mode}
+              messages={messages}
+              input={input}
+              setInput={setInput}
+              onSend={sendMessage}
+              sending={sending}
+              chatScrollRef={chatScrollRef}
+              templateMode={templateMode}
+              setTemplateMode={setTemplateMode}
+              selectedTemplate={selectedTemplate}
+              onOpenTemplatePicker={() => setTemplatePickerOpen(true)}
+              onBack={() => { setPhase('mode-select'); setMessages([]); setInput('') }}
+            />
+          )}
+          {(phase === 'generating' || phase === 'done') && (
+            <GeneratingView
+              key="gen"
+              steps={steps}
+              error={genError}
+              done={phase === 'done'}
+              intent={intent}
+            />
+          )}
+        </AnimatePresence>
 
-        {/* ── Form ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left */}
-          <div className="space-y-5">
-            {/* Topic */}
-            <div className="glass rounded-2xl p-5">
-              <label className="flex items-center gap-2 text-sm font-semibold mb-3">
-                <Type size={16} className="text-blue-400" />
-                {mode === 'creative' ? 'Sobre o que é o anúncio?' : 'Tema do Carrossel'} *
-              </label>
-              <textarea
-                value={topic}
-                onChange={e => setTopic(e.target.value)}
-                placeholder={
-                  mode === 'creative'
-                    ? 'Ex: Curso de Excel avançado com 70% de desconto...'
-                    : 'Ex: 5 erros que impedem você de crescer no Instagram...'
-                }
-                rows={3}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-blue-500/50 placeholder-gray-500 transition-colors"
-              />
-            </div>
-
-            {/* Tone */}
-            <div className="glass rounded-2xl p-5">
-              <label className="text-sm font-semibold mb-3 block">Tom da Copy</label>
-              <div className="grid grid-cols-2 gap-2">
-                {TONES.map(t => (
-                  <button key={t.value} onClick={() => setTone(t.value)}
-                    className={`px-3 py-2 rounded-xl text-left transition-all text-xs ${
-                      tone === t.value
-                        ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/40 text-white'
-                        : 'glass hover:bg-white/10 text-gray-400'
-                    }`}
-                  >
-                    <span className="font-semibold block">{t.label}</span>
-                    <span className="opacity-60">{t.desc}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Format */}
-            {mode === 'creative' && (
-              <div className="glass rounded-2xl p-5">
-                <label className="text-sm font-semibold mb-3 block">
-                  Formato
-                  {selectedTemplate && <span className="ml-2 text-[10px] text-purple-400 font-normal">· do template</span>}
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {FORMATS.map(f => (
-                    <button key={f.value} onClick={() => setFormat(f.value)}
-                      className={`p-3 rounded-xl text-center transition-all ${
-                        format === f.value
-                          ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/40 text-white'
-                          : 'glass hover:bg-white/10 text-gray-400'
-                      }`}
-                    >
-                      <f.icon size={20} className="mx-auto mb-1" />
-                      <div className="text-xs font-semibold">{f.label}</div>
-                      <div className="text-[10px] opacity-60">{f.ratio}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Layout */}
-            {mode === 'creative' && (
-              <div className="glass rounded-2xl p-5">
-                <label className="text-sm font-semibold mb-3 block">
-                  Layout do Criativo
-                  {selectedTemplate && <span className="ml-2 text-[10px] text-purple-400 font-normal">· do template</span>}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {LAYOUTS.map(l => (
-                    <button key={l.value} onClick={() => setLayout(l.value)}
-                      className={`px-3 py-2 rounded-xl text-left transition-all text-xs ${
-                        layout === l.value
-                          ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/40 text-white'
-                          : 'glass hover:bg-white/10 text-gray-400'
-                      }`}
-                    >
-                      <span className="font-semibold block">{l.label}</span>
-                      <span className="opacity-60">{l.desc}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Settings */}
-            <div className="glass rounded-2xl p-5">
-              <label className="flex items-center gap-2 text-sm font-semibold mb-4">
-                <Settings2 size={16} className="text-purple-400" /> Configurações
-              </label>
-              <div className="space-y-4">
-                {mode === 'carousel' && (
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>Número de slides</span>
-                      <span className="font-bold text-white">{slideCount}</span>
-                    </div>
-                    <input type="range" min={3} max={12} value={slideCount}
-                      onChange={e => setSlideCount(Number(e.target.value))}
-                      className="w-full accent-blue-500" />
-                  </div>
-                )}
-                <div>
-                  <label className="text-xs text-gray-400 mb-1 block">Público-alvo</label>
-                  <input value={audience} onChange={e => setAudience(e.target.value)}
-                    placeholder="Ex: empreendedores, mães, profissionais de marketing..."
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/50 placeholder-gray-500" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ImageIcon size={14} className="text-pink-400" />
-                    <span className="text-xs text-gray-300">Gerar imagem de fundo com IA</span>
-                  </div>
-                  <button onClick={() => setGenerateImages(!generateImages)}
-                    className={`w-10 h-5 rounded-full transition-all relative ${generateImages ? 'bg-blue-500' : 'bg-gray-600'}`}>
-                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${generateImages ? 'left-5' : 'left-0.5'}`} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: theme + preview */}
-          <div className="space-y-5">
-            <div className="glass rounded-2xl p-5">
-              <label className="text-sm font-semibold mb-3 block">
-                Paleta de Cores
-                {selectedTemplate && <span className="ml-2 text-[10px] text-purple-400 font-normal">· do template</span>}
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {THEMES.map(theme => (
-                  <button key={theme.value} onClick={() => setSelectedTheme(theme)}
-                    className={`p-3 rounded-xl transition-all border ${
-                      selectedTheme.value === theme.value
-                        ? 'border-blue-500 scale-105' : 'border-white/10 hover:border-white/20'
-                    }`}
-                    style={{ backgroundColor: theme.bg }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: theme.accent }} />
-                      <span className="text-xs font-semibold"
-                        style={{ color: theme.bg === '#f8fafc' ? '#0f172a' : '#fff' }}>
-                        {theme.label}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="glass rounded-2xl p-5">
-              <label className="text-sm font-semibold mb-3 block">Pré-visualização</label>
-              <div className="max-w-xs mx-auto">
-                <SlidePreview
-                  slide={previewSlide} index={0} size="md"
-                  format={mode === 'creative' ? format : 'square'} showSlideNumber={false} />
-              </div>
-              <p className="text-center text-[10px] text-gray-500 mt-2">
-                A imagem de fundo será gerada pela IA
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-center gap-2 mt-4 text-red-400 text-sm glass border border-red-500/20 rounded-xl p-4">
-            <AlertCircle size={16} /> {error}
-          </div>
+        {templatePickerOpen && (
+          <TemplatePickerModal
+            templates={templates}
+            mode={mode}
+            selectedId={selectedTemplate?.id ?? null}
+            onSelect={(t) => {
+              setSelectedTemplate(t)
+              setTemplateMode('manual')
+              setTemplatePickerOpen(false)
+            }}
+            onClose={() => setTemplatePickerOpen(false)}
+          />
         )}
-
-        {/* Progress */}
-        {isLoading && progress && (
-          <div className="mt-4 glass rounded-xl p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <Loader2 size={16} className="text-blue-400 animate-spin" />
-              <span className="text-sm text-gray-300">{progress.step}</span>
-              <span className="ml-auto text-xs text-blue-400 font-bold">{progress.value}%</span>
-            </div>
-            <div className="w-full bg-white/10 rounded-full h-2">
-              <div className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                style={{ width: `${progress.value}%` }} />
-            </div>
-          </div>
-        )}
-
-        {/* Generate button */}
-        <button onClick={handleGenerate} disabled={isLoading || !topic.trim()}
-          className={`mt-6 w-full flex items-center justify-center gap-3 py-4 rounded-2xl text-lg font-bold transition-all ${
-            isLoading || !topic.trim()
-              ? 'bg-white/10 text-gray-500 cursor-not-allowed'
-              : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 hover:scale-[1.02] glow-blue'
-          }`}
-        >
-          {isLoading
-            ? <><Loader2 size={22} className="animate-spin" /> Gerando...</>
-            : <><Sparkles size={22} />
-                {mode === 'creative' ? 'Gerar Criativo Viral' : 'Gerar Carrossel'}
-                <Zap size={18} /></>}
-        </button>
-
-        <p className="text-center text-xs text-gray-500 mt-3">⚡ Powered by Google Gemini</p>
       </div>
     </AppLayout>
+  )
+}
+
+/* ─── Sub-components ────────────────────────────────────────────────── */
+
+function CosmicBackground({ active }: { active: boolean }) {
+  return (
+    <div
+      className="fixed inset-0 pointer-events-none transition-opacity duration-1000"
+      style={{ opacity: active ? 1 : 0.3, zIndex: 0 }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 via-blue-900/10 to-pink-900/20" />
+      {Array.from({ length: 30 }).map((_, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full bg-white/30"
+          style={{
+            width: Math.random() * 4 + 1 + 'px',
+            height: Math.random() * 4 + 1 + 'px',
+            left: Math.random() * 100 + '%',
+            top: Math.random() * 100 + '%',
+          }}
+          animate={{
+            opacity: [0.2, 1, 0.2],
+            scale: [1, 1.5, 1],
+          }}
+          transition={{
+            duration: Math.random() * 3 + 2,
+            repeat: Infinity,
+            delay: Math.random() * 2,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+function ModeSelectView({ onSelect }: { onSelect: (m: CarouselMode) => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.4 }}
+      className="relative z-10 min-h-[80vh] flex flex-col items-center justify-center p-8"
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.2, duration: 0.5 }}
+        className="text-center mb-12"
+      >
+        <Sparkles size={48} className="text-purple-400 mx-auto mb-4 animate-pulse" />
+        <h1 className="text-4xl md:text-5xl font-black mb-3 gradient-text">
+          Olá, o que vamos criar hoje?
+        </h1>
+        <p className="text-gray-400 text-lg">
+          A IA cria por você. Você só descreve o que quer.
+        </p>
+      </motion.div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
+        {[
+          { mode: 'creative' as const, icon: Megaphone,  label: 'Criativo de Anúncio',  desc: 'Um post único e impactante' },
+          { mode: 'carousel' as const, icon: LayoutGrid, label: 'Carrossel Viral',     desc: 'Vários slides que prendem o leitor' },
+        ].map((opt, i) => (
+          <motion.button
+            key={opt.mode}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 + i * 0.1 }}
+            whileHover={{ scale: 1.03, y: -4 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => onSelect(opt.mode)}
+            className="glass border border-white/10 rounded-3xl p-8 text-left transition-all hover:border-purple-500/40 hover:bg-purple-500/5"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mb-4">
+              <opt.icon size={28} className="text-white" />
+            </div>
+            <h3 className="text-xl font-bold mb-1">{opt.label}</h3>
+            <p className="text-sm text-gray-400">{opt.desc}</p>
+          </motion.button>
+        ))}
+      </div>
+    </motion.div>
+  )
+}
+
+function ChatView({
+  mode, messages, input, setInput, onSend, sending, chatScrollRef,
+  templateMode, setTemplateMode, selectedTemplate, onOpenTemplatePicker, onBack,
+}: {
+  mode: CarouselMode
+  messages: ChatMessage[]
+  input: string
+  setInput: (s: string) => void
+  onSend: () => void
+  sending: boolean
+  chatScrollRef: React.RefObject<HTMLDivElement>
+  templateMode: 'auto' | 'random' | 'manual'
+  setTemplateMode: (m: 'auto' | 'random' | 'manual') => void
+  selectedTemplate: PublishedTemplate | null
+  onOpenTemplatePicker: () => void
+  onBack: () => void
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.4 }}
+      className="relative z-10 min-h-[90vh] flex flex-col max-w-3xl mx-auto p-4 md:p-8"
+    >
+      {/* Top bar */}
+      <div className="flex items-center gap-3 mb-6">
+        <button
+          onClick={onBack}
+          className="p-2 rounded-lg hover:bg-white/10"
+          type="button"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          {mode === 'carousel' ? <LayoutGrid size={14} /> : <Megaphone size={14} />}
+          <span>{mode === 'carousel' ? 'Carrossel' : 'Criativo'}</span>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4">
+        <AnimatePresence>
+          {messages.map((m, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                  m.role === 'user'
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
+                    : 'glass border border-white/10 text-gray-100'
+                }`}
+              >
+                {m.content}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {sending && (
+          <div className="flex justify-start">
+            <div className="glass border border-white/10 rounded-2xl px-4 py-3 text-sm flex items-center gap-2">
+              <Loader2 size={14} className="animate-spin text-purple-400" />
+              <span className="text-gray-400">Pensando...</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Template options */}
+      <div className="glass rounded-2xl p-3 mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-gray-400 mr-1">Template:</span>
+        <button
+          onClick={() => setTemplateMode('auto')}
+          className={`px-3 py-1.5 rounded-lg transition-all ${
+            templateMode === 'auto' ? 'bg-purple-500/30 border border-purple-500/50 text-purple-200' : 'hover:bg-white/5 text-gray-400'
+          }`}
+          type="button"
+        >
+          🤖 IA escolhe
+        </button>
+        <button
+          onClick={() => setTemplateMode('random')}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+            templateMode === 'random' ? 'bg-pink-500/30 border border-pink-500/50 text-pink-200' : 'hover:bg-white/5 text-gray-400'
+          }`}
+          type="button"
+        >
+          <Shuffle size={11} /> Aleatório
+        </button>
+        <button
+          onClick={onOpenTemplatePicker}
+          className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${
+            templateMode === 'manual' ? 'bg-blue-500/30 border border-blue-500/50 text-blue-200' : 'hover:bg-white/5 text-gray-400'
+          }`}
+          type="button"
+        >
+          <ImageIcon size={11} />
+          {selectedTemplate ? selectedTemplate.name.slice(0, 20) : 'Escolher manual'}
+        </button>
+      </div>
+
+      {/* Input */}
+      <div className="glass border border-white/10 rounded-2xl p-2 flex items-end gap-2">
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              onSend()
+            }
+          }}
+          rows={2}
+          placeholder="Conta o que você quer criar..."
+          className="flex-1 bg-transparent px-3 py-2 text-sm resize-none focus:outline-none placeholder-gray-500"
+        />
+        <button
+          onClick={onSend}
+          disabled={!input.trim() || sending}
+          className="p-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 disabled:opacity-40 transition-all"
+          type="button"
+        >
+          {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+function GeneratingView({
+  steps, error, done, intent,
+}: {
+  steps: GenerationStep[]
+  error: string | null
+  done: boolean
+  intent: Intent | null
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5 }}
+      className="relative z-10 min-h-[90vh] flex flex-col items-center justify-center p-8"
+    >
+      <motion.div
+        animate={done
+          ? { scale: [1, 1.3, 1], rotate: [0, 360] }
+          : { rotate: 360 }
+        }
+        transition={done
+          ? { duration: 0.8, ease: 'easeOut' }
+          : { repeat: Infinity, duration: 8, ease: 'linear' }
+        }
+        className="relative mb-8"
+      >
+        <Wand2 size={64} className="text-purple-400" />
+        {/* Glowing aura */}
+        <motion.div
+          className="absolute inset-0 rounded-full bg-purple-500/30 blur-2xl"
+          animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0.8, 0.5] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+      </motion.div>
+
+      <h2 className="text-2xl md:text-3xl font-black mb-2 gradient-text text-center">
+        {done ? '✨ Pronto!' : 'Criando sua arte...'}
+      </h2>
+      {intent && (
+        <p className="text-sm text-gray-400 mb-8 text-center max-w-xl">
+          &ldquo;{intent.tema}&rdquo; para {intent.audience}
+        </p>
+      )}
+
+      <div className="w-full max-w-md space-y-2">
+        <AnimatePresence>
+          {steps.map((step) => (
+            <motion.div
+              key={step.id}
+              layout
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`glass border rounded-xl px-4 py-3 flex items-center gap-3 text-sm transition-all ${
+                step.status === 'done' ? 'border-green-500/30 bg-green-500/5' :
+                step.status === 'running' ? 'border-purple-500/40 bg-purple-500/10' :
+                step.status === 'error' ? 'border-red-500/30 bg-red-500/5' :
+                'border-white/5 opacity-50'
+              }`}
+            >
+              <div className="w-5 h-5 flex-shrink-0">
+                {step.status === 'done' && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="text-green-400"
+                  >✓</motion.div>
+                )}
+                {step.status === 'running' && <Loader2 size={16} className="animate-spin text-purple-400" />}
+                {step.status === 'pending' && <span className="w-2 h-2 rounded-full bg-gray-600 inline-block mt-1.5" />}
+                {step.status === 'error' && <span className="text-red-400">✕</span>}
+              </div>
+              <span className={step.status === 'done' ? 'text-gray-400' : ''}>
+                {step.label}
+              </span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {error && (
+        <div className="mt-6 glass border border-red-500/30 rounded-xl p-3 text-red-400 text-sm max-w-md">
+          {error}
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
+function TemplatePickerModal({
+  templates, mode, selectedId, onSelect, onClose,
+}: {
+  templates: PublishedTemplate[]
+  mode: CarouselMode
+  selectedId: string | null
+  onSelect: (t: PublishedTemplate) => void
+  onClose: () => void
+}) {
+  const eligible = templates.filter(t => mode === 'creative'
+    ? (t.mode === 'creative' || t.mode === 'both')
+    : (t.mode === 'carousel' || t.mode === 'both')
+  )
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="glass border border-white/10 rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-y-auto p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold">Escolher template</h2>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-md" type="button">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {eligible.map(t => {
+            const parsed = parseStructure(t.structure ?? null)
+            const isSel = t.id === selectedId
+            return (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t)}
+                className={`rounded-xl overflow-hidden border transition-all text-left ${
+                  isSel ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-white/10 hover:border-white/30'
+                }`}
+                type="button"
+              >
+                {parsed ? (
+                  <div className="pointer-events-none">
+                    <TemplateRenderer
+                      structure={parsed}
+                      content={{ headline: 'EXEMPLO', subtitle: 'subtítulo', cta: 'CTA' }}
+                      showImageSlotHint={false}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-32 bg-gradient-to-br from-blue-500/20 to-purple-500/20" />
+                )}
+                <div className="p-2 bg-black/40">
+                  <p className="text-xs font-bold truncate">{t.name}</p>
+                </div>
+              </button>
+            )
+          })}
+          {eligible.length === 0 && (
+            <p className="col-span-full text-center text-sm text-gray-500 py-10">
+              Nenhum template disponível pra este modo.
+            </p>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
