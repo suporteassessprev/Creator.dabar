@@ -38,14 +38,31 @@ REGRAS GERAIS:
   - Spotlight radial: \`radial-gradient(circle at 50% 30%, #claro 0%, #escuro 80%)\`
 - Identifique 2-3 cores do gradient com base nos extremos.
 
-📝 DETECÇÃO DE FONTE — características visuais:
-- **Bebas Neue / Anton / Oswald**: SANS condensada (estreita), maiúsculas dominantes, peso alto (900). Use pra headlines grandes "GERE *IMAGENS*".
-- **Archivo Black / Inter Black (weight 900)**: SANS larga e geométrica, muito pesada. Headlines impacto blocos.
+📝 DETECÇÃO DE FONTE — características visuais (47 fontes disponíveis):
+
+MODERNAS (trending 2024-2026 — use quando o design parece atual/clean):
+- **Geist / Outfit / Plus Jakarta Sans / Space Grotesk**: SANS modernas, geometricamente refinadas. Trending em SaaS, AI, criativos virais.
+- **Sora / Onest / Lexend / Hanken Grotesk**: SANS minimalistas com proporções modernas. Headlines e body em designs clean.
+- **Albert Sans / Bricolage Grotesque / Figtree**: SANS expressivas/grotescas. Bricolage tem variável width único.
+
+DISPLAY IMPACTO:
+- **Bebas Neue / Anton / Oswald**: SANS condensada (estreita), maiúsculas dominantes, peso alto (900). Pra headlines grandes condensados.
+- **Archivo Black**: SANS larga e geométrica MUITO pesada. Headlines impacto blocos quadrados.
+- **Bungee / Russo One / Black Ops One**: Display retrô/militar/condensado.
+- **Alfa Slab One / Passion One**: Slab serif super pesada, impacto retrô.
+
+SERIF PREMIUM:
 - **Playfair Display / DM Serif Display / Merriweather**: SERIF clássica, contraste alto entre traços. Headlines elegantes.
+- **Lora / Cormorant Garamond / Crimson Pro / Instrument Serif**: SERIF refinada, alta legibilidade. Body editorial.
+
+SANS CLÁSSICAS:
 - **Poppins / Montserrat / Lato**: SANS humanista arredondada. Pra body, médio.
-- **Inter / Work Sans / Roboto**: SANS neutra moderna. Body text, parágrafos.
-- **Permanent Marker / Caveat / Patrick Hand**: HANDWRITING / brush. Decorativo.
-- **Bungee / Rubik Mono One**: SANS quadradona, bloco. Headlines retrô.
+- **Inter / Work Sans / Roboto / DM Sans / Manrope / Nunito**: SANS neutra moderna. Body text, parágrafos.
+
+HANDWRITING / DECORATIVAS:
+- **Permanent Marker / Caveat / Patrick Hand / Pacifico / Dancing Script**: HANDWRITING / brush. Decorativo.
+
+🔑 IMPORTANTE: Se o design parece MODERNO/CLEAN/PROFISSIONAL (linhas finas, espaçamento generoso, proporções refinadas), PREFIRA fontes do grupo MODERNAS (Geist, Outfit, Plus Jakarta) ao invés das clássicas.
 
 PESO DA FONTE — observe o traço visual:
 - 400 normal · 500 medium · 600 semibold · 700 bold · 800 extrabold · 900 black
@@ -134,8 +151,42 @@ Retorne SÓ a descrição em texto. Sem JSON ainda.
 `.trim()
 
 /**
+ * Step 3 prompt: derives a single-sentence image-generation prompt
+ * representing the template's theme/feel. Used to create the template's
+ * thumbnail/previewImage automatically.
+ */
+const PREVIEW_PROMPT_DERIVATION = `
+Com base na descrição acima do template, gere UMA frase em INGLÊS (entre 15 e 40 palavras) que descreva uma imagem hero/thumbnail representativa do tema visual deste template.
+
+REGRAS:
+- Em INGLÊS (Gemini gera melhor imagens com prompt em inglês).
+- Cinematic lighting, 4k, photorealistic, no text, no watermark.
+- Foque no FEEL/MOOD visual do template, NÃO no headline literal.
+- Sem nomes de marca, sem texto.
+
+Exemplos:
+- Template sobre auxílio maternidade rosa → "A serene Brazilian woman in soft pink lighting holding her pregnant belly, dreamy magenta gradient background, cinematic, 4k"
+- Template viral dark com IA → "Futuristic dark scene with neon yellow accents, hands holding glowing data, cinematic, ultra detailed, 4k"
+- Template aposentadoria azul → "Happy elderly Brazilian couple smiling outdoors in soft warm light, blue sky background, photorealistic, 4k"
+
+Retorne SÓ a frase. Sem aspas, sem markdown, sem prefixo.
+`.trim()
+
+export interface ExtractedTemplate {
+  structure: TemplateStructure
+  /**
+   * AI-generated thumbnail (data URL) representing the template's theme.
+   * Null if generation failed — the caller can fall back to the original
+   * uploaded image.
+   */
+  previewImage: string | null
+  /** The English prompt used to generate previewImage (for debug). */
+  previewImagePrompt: string | null
+}
+
+/**
  * Call Gemini Vision with the prompt + image and parse the response.
- * Returns a validated TemplateStructure or throws with a user-readable error.
+ * Returns a validated TemplateStructure + a generated thumbnail.
  *
  * Strategy:
  * 1. Step 1 (describe): Gemini Pro describes the image in detail. This
@@ -143,11 +194,14 @@ Retorne SÓ a descrição em texto. Sem JSON ainda.
  *    for gradients, fonts, proportions.
  * 2. Step 2 (convert): same model, feeds description + image + JSON
  *    schema prompt → outputs structured TemplateStructure.
+ * 3. Step 3 (preview prompt): derives a 1-sentence image-gen prompt.
+ * 4. Step 4 (generate image): calls gemini-2.5-flash-image with that
+ *    prompt → returns data URL for the template thumbnail.
  */
 export async function extractTemplateFromImage(
   imageDataUrl: string,
   geminiApiKey: string
-): Promise<TemplateStructure> {
+): Promise<ExtractedTemplate> {
   const { GoogleGenerativeAI } = await import('@google/generative-ai')
   const genAI = new GoogleGenerativeAI(geminiApiKey)
   // Pro is much better than Flash at visual extraction (worth the extra
@@ -191,5 +245,36 @@ Agora converta essa descrição em um JSON exato seguindo o schema acima. Retorn
     throw new Error('Estrutura gerada com erros: ' + errors.map(e => e.message).join('; '))
   }
 
-  return parsed
+  // Step 3: derive a single-sentence preview image prompt (in English,
+  // optimized for Gemini Image). Best-effort — failures don't block the
+  // template extraction itself.
+  let previewImagePrompt: string | null = null
+  let previewImage: string | null = null
+  try {
+    const promptResult = await model.generateContent([
+      `${PREVIEW_PROMPT_DERIVATION}\n\nDescrição do template:\n${description}`,
+    ])
+    previewImagePrompt = promptResult.response.text().trim().replace(/^["']|["']$/g, '')
+
+    // Step 4: generate the thumbnail using Gemini Image
+    if (previewImagePrompt) {
+      const imageModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image' })
+      const imgResult = await imageModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: previewImagePrompt }] }],
+        generationConfig: { responseModalities: ['IMAGE', 'TEXT'] } as any,
+      })
+      for (const part of imgResult.response.candidates?.[0]?.content?.parts || []) {
+        if ((part as any).inlineData?.mimeType?.startsWith('image/')) {
+          const inlineData = (part as any).inlineData
+          previewImage = `data:${inlineData.mimeType};base64,${inlineData.data}`
+          break
+        }
+      }
+    }
+  } catch (e: any) {
+    // Don't fail the extraction if thumbnail generation fails
+    console.warn('[extractTemplateFromImage] preview thumbnail step failed:', e?.message ?? 'unknown')
+  }
+
+  return { structure: parsed, previewImage, previewImagePrompt }
 }

@@ -15,7 +15,21 @@ export const metadata: Metadata = {
  */
 const GOOGLE_FONTS_URL =
   'https://fonts.googleapis.com/css2' +
-  '?family=Inter:wght@400;600;700;900' +
+  // Modernas (trending)
+  '?family=Geist:wght@400;500;600;700;900' +
+  '&family=Geist+Mono:wght@400;700' +
+  '&family=Outfit:wght@400;600;700;900' +
+  '&family=Plus+Jakarta+Sans:wght@400;600;700;800' +
+  '&family=Space+Grotesk:wght@400;500;700' +
+  '&family=Sora:wght@400;600;700;800' +
+  '&family=Onest:wght@400;600;700;900' +
+  '&family=Lexend:wght@400;600;700;900' +
+  '&family=Hanken+Grotesk:wght@400;600;700;900' +
+  '&family=Albert+Sans:wght@400;600;700;900' +
+  '&family=Bricolage+Grotesque:wght@400;600;700;800' +
+  '&family=Figtree:wght@400;600;700;900' +
+  // Sans clássicas
+  '&family=Inter:wght@400;600;700;900' +
   '&family=Poppins:wght@400;600;700;900' +
   '&family=Roboto:wght@400;700;900' +
   '&family=Montserrat:wght@400;700;900' +
@@ -26,6 +40,7 @@ const GOOGLE_FONTS_URL =
   '&family=Nunito:wght@400;700;900' +
   '&family=Manrope:wght@400;700;800' +
   '&family=DM+Sans:wght@400;700' +
+  // Display de impacto
   '&family=Bebas+Neue' +
   '&family=Anton' +
   '&family=Oswald:wght@400;700' +
@@ -36,17 +51,21 @@ const GOOGLE_FONTS_URL =
   '&family=Black+Ops+One' +
   '&family=Passion+One:wght@400;700;900' +
   '&family=Alfa+Slab+One' +
+  // Serif premium
   '&family=Playfair+Display:wght@400;700;900' +
   '&family=Merriweather:wght@400;700;900' +
   '&family=DM+Serif+Display' +
   '&family=Lora:wght@400;700' +
   '&family=Cormorant+Garamond:wght@400;700' +
   '&family=Crimson+Pro:wght@400;700' +
+  '&family=Instrument+Serif' +
+  // Handwriting / decorativas
   '&family=Caveat:wght@400;700' +
   '&family=Permanent+Marker' +
   '&family=Patrick+Hand' +
   '&family=Pacifico' +
   '&family=Dancing+Script:wght@400;700' +
+  // Mono
   '&family=JetBrains+Mono:wght@400;700' +
   '&family=Fira+Code:wght@400;700' +
   '&display=swap'
