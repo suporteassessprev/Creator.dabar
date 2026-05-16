@@ -128,8 +128,27 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'viral-carousel-store',
+      /**
+       * Persist carousels WITHOUT base64 imageUrl on slides.
+       *
+       * Base64-encoded AI images (data:image/...) are ~500KB-2MB each.
+       * A 7-slide carousel with images easily blows past localStorage's
+       * 5MB quota. The images live in IndexedDB-backed Carousel records
+       * in the DB anyway — what's in the store is just a navigation
+       * cache. On reload, the dashboard re-fetches from the server.
+       *
+       * We keep `templateStructure` and `previewImage` because they're
+       * small JSON / can be re-fetched. We strip slide.imageUrl since
+       * it's the bulk of the size.
+       */
       partialize: (state) => ({
-        carousels: state.carousels,
+        carousels: state.carousels.map(c => ({
+          ...c,
+          slides: c.slides.map(s => ({
+            ...s,
+            imageUrl: undefined,
+          })),
+        })),
       }),
     }
   )
