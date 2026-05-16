@@ -12,7 +12,7 @@ import {
   Save, Download, ChevronLeft, ChevronRight,
   Type, Palette, Image, Layout, Loader2,
   Sparkles, Trash2, Check, ArrowLeft,
-  Square, RectangleVertical, Smartphone,
+  Square, RectangleVertical, Smartphone, Replace, X,
 } from 'lucide-react'
 
 const FONTS = ['Inter', 'Poppins', 'Georgia', 'Courier New', 'Arial']
@@ -50,6 +50,29 @@ function EditorContent() {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [canExportZip, setCanExportZip] = useState(false)
   const slideRef = useRef<HTMLDivElement>(null)
+
+  // Template swap modal state
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+  const [availableTemplates, setAvailableTemplates] = useState<any[]>([])
+
+  // Lazy-load published templates the first time the user opens the picker
+  useEffect(() => {
+    if (!templatePickerOpen || availableTemplates.length > 0) return
+    fetch('/api/templates')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setAvailableTemplates(d) })
+      .catch(() => {})
+  }, [templatePickerOpen, availableTemplates.length])
+
+  function applyTemplate(tpl: any) {
+    if (!carousel) return
+    setCarousel({
+      ...carousel,
+      templateStructure: tpl.structure ?? null,
+      templateId: tpl.id,
+    })
+    setTemplatePickerOpen(false)
+  }
 
   useEffect(() => {
     if (carouselId) {
@@ -169,6 +192,13 @@ function EditorContent() {
             <div className="h-4 w-px bg-white/10" />
             <h1 className="text-sm font-semibold truncate flex-1">{carousel.title}</h1>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTemplatePickerOpen(true)}
+                className="flex items-center gap-1 glass px-3 py-2 rounded-lg text-xs hover:bg-purple-500/10 hover:border-purple-500/30 border border-transparent transition-colors text-purple-300"
+                title="Trocar pelo design de outro template"
+              >
+                <Replace size={14} /> Trocar template
+              </button>
               <button
                 onClick={handleExport}
                 className="flex items-center gap-1 glass px-3 py-2 rounded-lg text-xs hover:bg-white/10 transition-colors"
@@ -556,7 +586,96 @@ function EditorContent() {
           </div>
         </div>
       </div>
+
+      {templatePickerOpen && (
+        <SwapTemplateModal
+          templates={availableTemplates}
+          mode={carousel.mode}
+          currentTemplateId={carousel.templateId ?? null}
+          onSelect={applyTemplate}
+          onClose={() => setTemplatePickerOpen(false)}
+        />
+      )}
     </AppLayout>
+  )
+}
+
+/* ─── Swap template modal ──────────────────────────────────────────── */
+function SwapTemplateModal({
+  templates, mode, currentTemplateId, onSelect, onClose,
+}: {
+  templates: any[]
+  mode: string
+  currentTemplateId: string | null
+  onSelect: (tpl: any) => void
+  onClose: () => void
+}) {
+  // eligible by mode
+  const eligible = templates.filter(t =>
+    mode === 'creative' ? (t.mode === 'creative' || t.mode === 'both')
+                        : (t.mode === 'carousel' || t.mode === 'both')
+  )
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="glass border border-white/10 rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-y-auto p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Replace size={18} /> Trocar template
+          </h2>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-md">
+            <X size={18} />
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mb-4">
+          O texto e a imagem geradas serão mantidos — só o layout visual muda.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {eligible.map(t => {
+            const parsed = (() => {
+              try { return t.structure ? JSON.parse(t.structure) : null } catch { return null }
+            })()
+            const isCurrent = t.id === currentTemplateId
+            return (
+              <button
+                key={t.id}
+                onClick={() => onSelect(t)}
+                className={`rounded-xl overflow-hidden border transition-all text-left ${
+                  isCurrent ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-white/10 hover:border-white/30'
+                }`}
+                type="button"
+              >
+                {parsed ? (
+                  <div className="pointer-events-none">
+                    <TemplateRenderer
+                      structure={parsed}
+                      content={{ headline: 'EXEMPLO', subtitle: 'subtítulo do template', cta: 'CTA' }}
+                      showImageSlotHint={false}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-32 bg-gradient-to-br from-blue-500/20 to-purple-500/20" />
+                )}
+                <div className="p-2 bg-black/40">
+                  <p className="text-xs font-bold truncate">{t.name}</p>
+                  {isCurrent && <p className="text-[10px] text-blue-400">Atual</p>}
+                </div>
+              </button>
+            )
+          })}
+          {eligible.length === 0 && (
+            <p className="col-span-full text-center text-sm text-gray-500 py-10">
+              Nenhum template publicado pra este modo. Cria um em /admin/templates.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
