@@ -20,7 +20,11 @@ Você é um analisador especialista em design de templates de redes sociais e an
 1. GRADIENTE no fundo — se o fundo tem QUALQUER transição de cor (mesmo sutil), USE \`linear-gradient(...)\` ou \`radial-gradient(...)\` no fill do background, NUNCA simplifique para cor sólida.
 2. TAMANHO REAL das fontes — observe a proporção visual. Headline gigantesco = fontSize 80-120. Body normal = 18-28. Footer pequeno = 12-16.
 3. FONTE CORRETA — analise CARACTERÍSTICAS VISUAIS: condensada/larga, serif/sans, peso, contraste. Combine com a tabela de fontes abaixo.
-4. ACCENT COLOR — palavras em cor diferente dentro do mesmo headline devem ser envolvidas por *asteriscos*.
+4. ACCENT COLOR via *asteriscos* — quando UMA PALAVRA dentro de um headline está em cor diferente (amarelo, vermelho, rosa, etc), envolva ela com *asteriscos* NO TEXTO do placeholder. Defina accentColor no elemento de texto.
+   ❌ ERRADO: criar uma SHAPE colorida atrás da palavra pra simular cor diferente
+   ❌ ERRADO: criar dois text_headline separados com cores diferentes
+   ✅ CERTO: 1 text_headline com placeholder "PARE DE USAR O *GOOGLE NANO BANANA*" e accentColor #facc15
+   Por que isso importa: a renderização final precisa que as palavras coloridas FAÇAM PARTE DO MESMO TEXTO (mesma linha, mesmo wrap), não que sejam elementos separados.
 5. POSIÇÃO PROPORCIONAL — TODAS posições em PORCENTAGEM (0-100). Meça a altura do texto como % da altura do canvas.
 
 REGRAS GERAIS:
@@ -219,8 +223,10 @@ export async function extractTemplateFromImage(
   const describeResult = await model.generateContent([DESCRIBE_PROMPT, imagePart])
   const description = describeResult.response.text()
 
-  // Step 2: convert to JSON, with the description as context
-  const convertPrompt = `${EXTRACT_TEMPLATE_PROMPT}
+  // Step 2: convert to JSON, with the description as context.
+  // Retry once with a stricter "JSON-only" reminder if the first call
+  // returns malformed output or fails validation.
+  const baseConvertPrompt = `${EXTRACT_TEMPLATE_PROMPT}
 
 ────────────────────────────────────────────
 DESCRIÇÃO DETALHADA QUE VOCÊ MESMO FEZ (use como base):
@@ -230,20 +236,28 @@ ${description}
 
 Agora converta essa descrição em um JSON exato seguindo o schema acima. Retorne APENAS o JSON.`
 
-  const result = await model.generateContent([convertPrompt, imagePart])
-  const text = result.response.text()
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error('IA retornou resposta inválida — sem JSON.')
-
-  const parsed = parseStructure(jsonMatch[0])
-  if (!parsed) {
-    throw new Error('IA retornou estrutura inválida (parseStructure falhou). Tente outra imagem.')
+  async function attemptExtract(prompt: string): Promise<{ ok: true; structure: TemplateStructure } | { ok: false; error: string }> {
+    const result = await model.generateContent([prompt, imagePart])
+    const text = result.response.text()
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return { ok: false, error: 'IA retornou resposta sem JSON' }
+    const parsedAttempt = parseStructure(jsonMatch[0])
+    if (!parsedAttempt) return { ok: false, error: 'JSON inválido (parseStructure falhou)' }
+    const valErrors = validateStructure(parsedAttempt)
+    if (valErrors.length > 0) return { ok: false, error: 'Validação: ' + valErrors.map(e => e.message).join('; ') }
+    return { ok: true, structure: parsedAttempt }
   }
 
-  const errors = validateStructure(parsed)
-  if (errors.length > 0) {
-    throw new Error('Estrutura gerada com erros: ' + errors.map(e => e.message).join('; '))
+  let attempt = await attemptExtract(baseConvertPrompt)
+  if (!attempt.ok) {
+    console.warn(`[extractTemplateFromImage] 1st attempt failed: ${attempt.error}. Retrying with stricter prompt...`)
+    const retryPrompt = `${baseConvertPrompt}\n\n⚠️ TENTATIVA ANTERIOR FALHOU: ${attempt.error}.\nRetorne APENAS um JSON válido seguindo EXATAMENTE o schema. Sem markdown, sem comentários, sem texto antes ou depois das chaves {}.`
+    attempt = await attemptExtract(retryPrompt)
+    if (!attempt.ok) {
+      throw new Error('IA não conseguiu gerar estrutura válida em 2 tentativas. Tente outra imagem ou clique "Analisar de novo". Último erro: ' + attempt.error)
+    }
   }
+  const parsed = attempt.structure
 
   // Step 3: derive a single-sentence preview image prompt (in English,
   // optimized for Gemini Image). Best-effort — failures don't block the
