@@ -94,12 +94,17 @@ export default function CreateTemplateFromImagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const [aiPreviewThumbnail, setAiPreviewThumbnail] = useState<string | null>(null)
+  const [aiPreviewPrompt,    setAiPreviewPrompt]    = useState<string | null>(null)
+
   async function extract() {
     if (!imageDataUrl) return
     setError(null)
     setPhase('extracting')
     setStructure(null)
     setSlotPreviews({})
+    setAiPreviewThumbnail(null)
+    setAiPreviewPrompt(null)
     try {
       const res = await fetch('/api/admin/templates/from-image', {
         method: 'POST',
@@ -109,6 +114,8 @@ export default function CreateTemplateFromImagePage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || `Erro ${res.status}`)
       setStructure(data.structure)
+      setAiPreviewThumbnail(data.previewImage ?? null)
+      setAiPreviewPrompt(data.previewImagePrompt ?? null)
       setPhase('preview')
       // Kick off preview images in parallel for every image_slot — admin
       // sees the template with real images instead of placeholder cinza.
@@ -204,6 +211,7 @@ export default function CreateTemplateFromImagePage() {
         active:      true,
         published:   true,  // auto-publish — admin can unpublish from the list if needed
         structure:   JSON.stringify(structure),
+        previewImage: aiPreviewThumbnail ?? imageDataUrl, // fallback to original upload
       }
       const res = await fetch('/api/admin/templates', {
         method: 'POST',
@@ -394,7 +402,40 @@ export default function CreateTemplateFromImagePage() {
                   <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/20">
                     {structure.elements.length} elemento{structure.elements.length === 1 ? '' : 's'}
                   </span>
+                  {aiPreviewThumbnail && (
+                    <span className="px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/20">
+                      ✨ Thumbnail IA
+                    </span>
+                  )}
                 </div>
+
+                {/* AI thumbnail preview — shown when generated */}
+                {aiPreviewThumbnail && (
+                  <div className="mt-4 glass rounded-xl p-3 border border-pink-500/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-semibold text-pink-300 flex items-center gap-1.5">
+                        <Sparkles size={11} /> Thumbnail gerada por IA
+                      </span>
+                      <span className="text-[10px] text-gray-500">salva como preview do template</span>
+                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={aiPreviewThumbnail}
+                      alt="Thumbnail gerada"
+                      className="w-full rounded-lg object-cover aspect-video"
+                    />
+                    {aiPreviewPrompt && (
+                      <details className="mt-2">
+                        <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
+                          Ver prompt usado
+                        </summary>
+                        <p className="text-[10px] text-gray-300 mt-1 italic bg-black/30 rounded p-2">
+                          {aiPreviewPrompt}
+                        </p>
+                      </details>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-4 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
                   <p className="text-[10px] text-amber-300/90 mb-2 leading-relaxed">

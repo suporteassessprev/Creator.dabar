@@ -48,11 +48,15 @@ export async function POST(req: NextRequest) {
     }
 
     const geminiKey = getServerGeminiKey()
-    const structure = await extractTemplateFromImage(image, geminiKey)
+    const extracted = await extractTemplateFromImage(image, geminiKey)
 
-    console.log(`[api/admin/templates/from-image] admin=${session.userId} ok elements=${structure.elements.length}`)
+    console.log(`[api/admin/templates/from-image] admin=${session.userId} ok elements=${extracted.structure.elements.length} thumb=${!!extracted.previewImage}`)
 
-    return NextResponse.json({ structure })
+    return NextResponse.json({
+      structure: extracted.structure,
+      previewImage: extracted.previewImage,
+      previewImagePrompt: extracted.previewImagePrompt,
+    })
   } catch (e: any) {
     if (e instanceof GeminiKeyMissingError) {
       return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
