@@ -27,7 +27,7 @@ import { contentToSlides as buildSlides } from '@/lib/gemini'
 import { parseStructure } from '@/lib/template-structure'
 import {
   Sparkles, Megaphone, LayoutGrid, Send, Loader2, ArrowLeft,
-  Shuffle, Image as ImageIcon, X, Wand2,
+  Shuffle, Image as ImageIcon, X, Wand2, Mic, MicOff,
 } from 'lucide-react'
 
 type Phase = 'mode-select' | 'chat' | 'generating' | 'done'
@@ -586,30 +586,136 @@ function ChatView({
       </div>
 
       {/* Input */}
-      <div className="glass border border-white/10 rounded-2xl p-2 flex items-end gap-2">
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              onSend()
-            }
-          }}
-          rows={2}
-          placeholder="Conta o que você quer criar..."
-          className="flex-1 bg-transparent px-3 py-2 text-sm resize-none focus:outline-none placeholder-gray-500"
-        />
-        <button
-          onClick={onSend}
-          disabled={!input.trim() || sending}
-          className="p-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 disabled:opacity-40 transition-all"
-          type="button"
-        >
-          {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-        </button>
-      </div>
+      <ChatInput
+        input={input}
+        setInput={setInput}
+        onSend={onSend}
+        sending={sending}
+      />
     </motion.div>
+  )
+}
+
+/**
+ * Chat input with text + voice mode (Web Speech API).
+ * Recognition is browser-side (free, no API call). Falls back gracefully
+ * if the browser doesn't support SpeechRecognition (Firefox).
+ */
+function ChatInput({
+  input, setInput, onSend, sending,
+}: {
+  input: string
+  setInput: (s: string) => void
+  onSend: () => void
+  sending: boolean
+}) {
+  const [recording, setRecording] = useState(false)
+  const [voiceSupported, setVoiceSupported] = useState(true)
+  const recognitionRef = useRef<any>(null)
+
+  // Initialize SpeechRecognition once
+  useEffect(() => {
+    const SR = (typeof window !== 'undefined') && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+    if (!SR) {
+      setVoiceSupported(false)
+      return
+    }
+    const rec = new SR()
+    rec.lang = 'pt-BR'
+    rec.continuous = false
+    rec.interimResults = true
+    rec.maxAlternatives = 1
+    recognitionRef.current = rec
+  }, [])
+
+  function toggleRecording() {
+    const rec = recognitionRef.current
+    if (!rec) return
+
+    if (recording) {
+      try { rec.stop() } catch {}
+      setRecording(false)
+      return
+    }
+
+    // Reset handlers fresh each session
+    let finalTranscript = ''
+    rec.onresult = (event: any) => {
+      let interim = ''
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const result = event.results[i]
+        if (result.isFinal) finalTranscript += result[0].transcript
+        else interim += result[0].transcript
+      }
+      // Show interim + final in the input as we go
+      setInput((finalTranscript + interim).trim())
+    }
+    rec.onerror = (e: any) => {
+      console.warn('SpeechRecognition error:', e?.error)
+      setRecording(false)
+    }
+    rec.onend = () => {
+      setRecording(false)
+    }
+
+    try {
+      rec.start()
+      setRecording(true)
+    } catch (e) {
+      console.warn('Failed to start recognition:', e)
+      setRecording(false)
+    }
+  }
+
+  return (
+    <div className="glass border border-white/10 rounded-2xl p-2 flex items-end gap-2">
+      <textarea
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            onSend()
+          }
+        }}
+        rows={2}
+        placeholder={recording ? '🎤 Ouvindo...' : 'Conta o que você quer criar... (ou aperte o mic)'}
+        className="flex-1 bg-transparent px-3 py-2 text-sm resize-none focus:outline-none placeholder-gray-500"
+      />
+
+      {/* Voice button — only show if browser supports it */}
+      {voiceSupported && (
+        <button
+          onClick={toggleRecording}
+          disabled={sending}
+          className={`p-3 rounded-xl transition-all relative ${
+            recording
+              ? 'bg-red-500/30 border border-red-500/50 text-red-200'
+              : 'glass hover:bg-white/10 text-gray-300'
+          } disabled:opacity-40`}
+          type="button"
+          title={recording ? 'Parar gravação' : 'Falar (Web Speech API, PT-BR)'}
+        >
+          {recording ? <MicOff size={16} /> : <Mic size={16} />}
+          {recording && (
+            <motion.span
+              className="absolute inset-0 rounded-xl border-2 border-red-400"
+              animate={{ opacity: [0.3, 0.8, 0.3] }}
+              transition={{ duration: 1.2, repeat: Infinity }}
+            />
+          )}
+        </button>
+      )}
+
+      <button
+        onClick={onSend}
+        disabled={!input.trim() || sending || recording}
+        className="p-3 rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:opacity-90 disabled:opacity-40 transition-all"
+        type="button"
+      >
+        {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+      </button>
+    </div>
   )
 }
 
