@@ -9,6 +9,7 @@ import {
   MISSING_GEMINI_KEY_MESSAGE,
 } from '@/lib/gemini'
 import { sanitizeErrorMessage } from '@/lib/sanitize-error'
+import { extractJsonFromAi } from '@/lib/extract-json'
 
 async function callGemini(prompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(getServerGeminiKey())
@@ -17,11 +18,7 @@ async function callGemini(prompt: string): Promise<string> {
   return result.response.text()
 }
 
-function extractJson(text: string): unknown {
-  const match = text.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('Resposta inválida da IA. Tente novamente.')
-  return JSON.parse(match[0])
-}
+// extractJson moved to lib/extract-json.ts (extractJsonFromAi).
 
 export async function POST(req: NextRequest) {
   try {
@@ -55,7 +52,7 @@ export async function POST(req: NextRequest) {
         topic, tone: toneStr, audience: audienceStr,
       })
       const text     = await callGemini(prompt)
-      const creative = extractJson(text) as {
+      const creative = extractJsonFromAi(text) as {
         headline: string; subtitle: string; cta: string; imagePrompt: string
       }
 
@@ -75,7 +72,7 @@ export async function POST(req: NextRequest) {
       slideCount: String(slideCount || 7),
     })
     const text   = await callGemini(prompt)
-    const parsed = extractJson(text) as { title: string; slides: unknown[] }
+    const parsed = extractJsonFromAi(text) as { title: string; slides: unknown[] }
 
     if (session) {
       await consumeCredit(session.userId, 'generate_text', {

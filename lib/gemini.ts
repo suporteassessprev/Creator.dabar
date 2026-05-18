@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { Slide, SlideLayout, CarouselStyle, createSlide } from './store'
+import { extractJsonFromAi } from './extract-json'
 
 export interface GenerateCarouselOptions {
   topic: string
@@ -92,12 +93,7 @@ export async function generateCarouselContent(
 
   const result = await model.generateContent(CAROUSEL_PROMPT(opts))
   const text = result.response.text()
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error('Resposta inválida da IA. Tente novamente.')
-
-  const parsed = JSON.parse(jsonMatch[0])
-  return parsed
+  return extractJsonFromAi(text)
 }
 
 export async function generateSlideImage(prompt: string): Promise<string | null> {
@@ -184,11 +180,7 @@ export async function generateAdCreativeContent(
 
   const result = await model.generateContent(AD_CREATIVE_PROMPT(opts))
   const text = result.response.text()
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error('Resposta inválida da IA. Tente novamente.')
-
-  return JSON.parse(jsonMatch[0])
+  return extractJsonFromAi(text)
 }
 
 export function adCreativeToSlide(
