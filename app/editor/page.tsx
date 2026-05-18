@@ -146,17 +146,30 @@ function EditorContent() {
       const res = await fetch('/api/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: activeSlide.imagePrompt }),
+        body: JSON.stringify({ prompt: activeSlide.imagePrompt, mode: carousel.mode }),
       })
       if (res.ok) {
         const { imageData } = await res.json()
-        updateSlide({ imageUrl: imageData })
+        // Keep a rolling history (max 4) so the user can A/B between
+        // recent generations without burning extra credits.
+        const previous = activeSlide.imageHistory ?? (activeSlide.imageUrl ? [activeSlide.imageUrl] : [])
+        const nextHistory = [imageData, ...previous.filter(u => u !== imageData)].slice(0, 4)
+        updateSlide({ imageUrl: imageData, imageHistory: nextHistory })
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Erro ao gerar imagem' }))
+        alert(err.error || 'Erro ao gerar imagem')
       }
     } catch (e) {
       console.error(e)
     } finally {
       setIsGeneratingImage(false)
     }
+  }
+
+  /** Swap the active image to an earlier generation without re-spending credit. */
+  const handlePickFromHistory = (url: string) => {
+    if (url === activeSlide.imageUrl) return
+    updateSlide({ imageUrl: url })
   }
 
   const handleExport = async () => {
@@ -568,6 +581,8 @@ function EditorContent() {
                     >
                       {isGeneratingImage ? (
                         <><Loader2 size={16} className="animate-spin" /> Gerando imagem...</>
+                      ) : activeSlide.imageUrl ? (
+                        <><Sparkles size={16} /> Gerar nova variação</>
                       ) : (
                         <><Sparkles size={16} /> Gerar com IA</>
                       )}
@@ -590,6 +605,40 @@ function EditorContent() {
                             <Trash2 size={12} />
                           </button>
                         </div>
+                      </div>
+                    )}
+
+                    {/* Rolling image history — recently generated alternatives
+                        the user can switch between without re-spending credit */}
+                    {(activeSlide.imageHistory?.length ?? 0) > 1 && (
+                      <div>
+                        <label className="text-xs text-gray-400 mb-2 block font-semibold">
+                          Variações recentes ({activeSlide.imageHistory?.length})
+                        </label>
+                        <div className="grid grid-cols-4 gap-2">
+                          {activeSlide.imageHistory?.map((url, i) => {
+                            const isActive = url === activeSlide.imageUrl
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => handlePickFromHistory(url)}
+                                className={`relative rounded-lg overflow-hidden aspect-square border-2 transition-all ${
+                                  isActive
+                                    ? 'border-blue-500 ring-2 ring-blue-500/30'
+                                    : 'border-white/10 hover:border-white/40'
+                                }`}
+                                title={isActive ? 'Imagem ativa' : 'Trocar pra esta'}
+                                type="button"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={url} alt={`opção ${i + 1}`} className="w-full h-full object-cover" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1.5">
+                          Clica em qualquer thumb pra trocar sem gastar crédito.
+                        </p>
                       </div>
                     )}
 

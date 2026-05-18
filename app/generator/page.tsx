@@ -298,7 +298,13 @@ export default function ChatGeneratorPage() {
             })
             if (imgRes.ok) {
               const { imageData } = await imgRes.json()
-              if (imageData) carousel.slides[i] = { ...slide, imageUrl: imageData }
+              if (imageData) {
+                carousel.slides[i] = {
+                  ...slide,
+                  imageUrl: imageData,
+                  imageHistory: [imageData],
+                }
+              }
             }
           } catch {
             // continue with other slides

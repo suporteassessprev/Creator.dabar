@@ -23,6 +23,15 @@ export interface Slide {
   subtitle?: string
   cta?: string
   imageUrl?: string
+  /**
+   * Up to 4 recently-generated images for this slide. Each time the user
+   * regenerates, the new image is pushed and the active imageUrl is
+   * swapped to it. Old images stay so the user can click back to one they
+   * preferred — no need to re-spend credits regenerating.
+   * Kept in memory only (stripped from localStorage persistence to avoid
+   * quota issues; base64 images are heavy).
+   */
+  imageHistory?: string[]
   imagePrompt?: string
   backgroundColor: string
   textColor: string
@@ -147,6 +156,7 @@ export const useAppStore = create<AppState>()(
           slides: c.slides.map(s => ({
             ...s,
             imageUrl: undefined,
+            imageHistory: undefined,
           })),
         })),
       }),
