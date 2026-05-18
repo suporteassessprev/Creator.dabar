@@ -11,7 +11,7 @@
  * Substitutes placeholders with real content (headline, subtitle, cta,
  * imageUrl) when provided. With no content, shows placeholders.
  */
-import { CSSProperties } from 'react'
+import { CSSProperties, useLayoutEffect, useRef, useState } from 'react'
 import {
   TemplateStructure,
   TemplateElement,
@@ -75,38 +75,74 @@ function selectionRing(selected: boolean): CSSProperties {
 function TextNode({ el, content }: { el: TextElement; content?: TemplateContent }) {
   const text = resolveText(el, content)
   const segments = parseAccentSegments(text)
-  const accentColor = el.accentColor ?? '#facc15' // amber-400 default
+  const accentColor = el.accentColor ?? '#facc15'
   const hasBackground = !!el.background
 
   /**
-   * Auto-fit heuristic. The base fontSize is what the admin set in the
-   * editor for the placeholder text. When the actual content (AI-generated
-   * or user-typed) is LONGER than the placeholder, the text overflows.
-   * We compute a shrink factor based on text length vs the rough character
-   * capacity of the element box. Result: long headlines auto-shrink rather
-   * than overflowing the canvas.
+   * Auto-fit by REAL DOM measurement.
+   *
+   * Old approach was a charsPerLine heuristic — it overestimated capacity
+   * for display fonts like Anton (wider glyphs) and headlines could
+   * overflow the box, especially the last line. New approach:
+   *
+   *   1. Render at the admin-configured fontSize (in cqw so it scales
+   *      with the canvas).
+   *   2. After paint, measure if the inner text overflows the box.
+   *   3. Binary search the fontSize down until it fits (or hits floor).
+   *
+   * Runs once per render via useLayoutEffect so the user never sees the
+   * unfit state — the shrink happens before the browser paints.
    */
-  const baseFontPx  = el.fontSize ?? 32
-  const baseFontCqw = baseFontPx / 10.8
+  const baseFontCqw = (el.fontSize ?? 32) / 10.8
   const lineHeightVal = el.lineHeight ?? 1.2
-  // Rough capacity heuristic: chars per line scales with element width;
-  // lines available scale with element height / font height.
-  const charsPerLine    = Math.max(1, (el.width * 0.85) / baseFontCqw)
-  const linesAvailable  = Math.max(1, (el.height * 0.9) / (baseFontCqw * lineHeightVal * 1.1))
-  const charCapacity    = charsPerLine * linesAvailable
-  // Use plain text length for capacity calc (asterisks excluded).
-  const plainLen = segments.reduce((acc, s) => acc + s.text.length, 0)
-  const shrinkFactor = Math.min(1, Math.sqrt(charCapacity / Math.max(plainLen, 1)))
-  const effectiveFontCqw = baseFontCqw * shrinkFactor
+  const boxRef    = useRef<HTMLDivElement>(null)
+  const innerRef  = useRef<HTMLSpanElement>(null)
+  const [fontCqw, setFontCqw] = useState(baseFontCqw)
+
+  useLayoutEffect(() => {
+    setFontCqw(baseFontCqw)
+  }, [baseFontCqw, text, el.width, el.height])
+
+  useLayoutEffect(() => {
+    const box = boxRef.current
+    const inner = innerRef.current
+    if (!box || !inner) return
+
+    // Already at base; check overflow and shrink if needed.
+    let lo = 0.25 * baseFontCqw   // floor: don't go below 25% of base
+    let hi = baseFontCqw
+    let best = baseFontCqw
+
+    const fits = (size: number): boolean => {
+      inner.style.fontSize = `${size}cqw`
+      // 1px tolerance to account for sub-pixel rounding
+      return inner.scrollHeight <= box.clientHeight + 1
+          && inner.scrollWidth  <= box.clientWidth  + 1
+    }
+
+    if (fits(hi)) {
+      best = hi
+    } else {
+      // Binary search for the largest size that fits.
+      for (let i = 0; i < 8; i++) {
+        const mid = (lo + hi) / 2
+        if (fits(mid)) { best = mid; lo = mid } else { hi = mid }
+      }
+    }
+    inner.style.fontSize = `${best}cqw`
+    setFontCqw(best)
+    // Re-run whenever the relevant inputs change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, baseFontCqw, el.width, el.height, el.fontFamily, el.fontWeight])
 
   const style: CSSProperties = {
     fontFamily: el.fontFamily ?? 'Inter, system-ui, sans-serif',
-    fontSize: `${effectiveFontCqw}cqw`,
+    fontSize: `${fontCqw}cqw`,
     fontWeight: el.fontWeight ?? 700,
     color: el.color ?? '#ffffff',
     textAlign: el.align ?? 'center',
     letterSpacing: el.letterSpacing ? `${el.letterSpacing}px` : undefined,
-    lineHeight: el.lineHeight ?? 1.2,
+    lineHeight: lineHeightVal,
     opacity: el.opacity ?? 1,
     background: el.background,
     borderRadius: hasBackground ? `${el.borderRadius ?? 0}px` : undefined,
@@ -124,8 +160,8 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
     wordBreak: 'break-word',
   }
   return (
-    <div style={style}>
-      <span>
+    <div ref={boxRef} style={style}>
+      <span ref={innerRef} style={{ display: 'inline-block', maxWidth: '100%' }}>
         {segments.map((seg, i) => (
           <span key={i} style={seg.accent ? { color: accentColor } : undefined}>
             {seg.text}
