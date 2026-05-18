@@ -6,9 +6,13 @@ import AppLayout from '@/components/AppLayout'
 import SlidePreview from '@/components/SlidePreview'
 import TemplateRenderer from '@/components/TemplateRenderer'
 import EditableTemplateCanvas from '@/components/EditableTemplateCanvas'
+import EditableElementSidebar from '@/components/EditableElementSidebar'
 import ExportZipButton from '@/components/ExportZipButton'
 import { useAppStore, Slide, SlideLayout, CreativeFormat } from '@/lib/store'
-import { parseStructure, serializeStructure, type TemplateStructure } from '@/lib/template-structure'
+import {
+  parseStructure, serializeStructure,
+  type TemplateStructure, type TemplateElement,
+} from '@/lib/template-structure'
 import {
   Save, Download, ChevronLeft, ChevronRight,
   Type, Palette, Image, Layout, Loader2,
@@ -48,6 +52,9 @@ function EditorContent() {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0)
   const [activeTab, setActiveTab] = useState<'text' | 'style' | 'image' | 'layout'>('text')
   const [saved, setSaved] = useState(false)
+  // Selected element in EditableTemplateCanvas — controlled here so the
+  // right-hand sidebar can show element-specific controls.
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   const [canExportZip, setCanExportZip] = useState(false)
   const slideRef = useRef<HTMLDivElement>(null)
@@ -291,6 +298,8 @@ function EditorContent() {
                           cta:      activeSlide.cta,
                           imageUrl: activeSlide.imageUrl,
                         }}
+                        selectedId={selectedElementId}
+                        onSelectionChange={setSelectedElementId}
                         onStructureChange={(next: TemplateStructure) => {
                           setCarousel({
                             ...carousel,
@@ -317,6 +326,35 @@ function EditorContent() {
 
         {/* Right panel: editor */}
         <div className="w-80 border-l border-white/5 flex flex-col glass-dark overflow-hidden">
+          {/* Element editor (when template structure exists) */}
+          {carousel.templateStructure && (() => {
+            const tpl = parseStructure(carousel.templateStructure)
+            const selectedEl: TemplateElement | null = tpl && selectedElementId
+              ? (tpl.elements.find(e => e.id === selectedElementId) ?? null)
+              : null
+            return (
+              <div className="border-b border-white/5 p-4">
+                <EditableElementSidebar
+                  element={selectedEl}
+                  onChange={(patch) => {
+                    if (!tpl || !selectedEl) return
+                    const next: TemplateStructure = {
+                      ...tpl,
+                      elements: tpl.elements.map(x =>
+                        x.id === selectedEl.id ? ({ ...x, ...patch } as TemplateElement) : x
+                      ),
+                    }
+                    setCarousel({
+                      ...carousel,
+                      templateStructure: serializeStructure(next),
+                    })
+                  }}
+                  onDeselect={() => setSelectedElementId(null)}
+                />
+              </div>
+            )
+          })()}
+
           {/* Tabs */}
           <div className="flex border-b border-white/5">
             {[

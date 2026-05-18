@@ -15,7 +15,7 @@
  * Image_slot elements are filled with the current slide's imageUrl
  * (same content semantics as TemplateRenderer).
  */
-import { useRef, useState, useCallback, useEffect, type CSSProperties } from 'react'
+import { useRef, useState, useCallback, type CSSProperties } from 'react'
 import {
   TemplateStructure,
   TemplateElement,
@@ -23,23 +23,34 @@ import {
   ASPECT_RATIO,
 } from '@/lib/template-structure'
 import TemplateRenderer from './TemplateRenderer'
-import EditableElementToolbar from './EditableElementToolbar'
 
 interface Props {
   structure: TemplateStructure
   content?: TemplateContent
   /** Called whenever the user finishes a move/resize (mouseup). */
   onStructureChange: (s: TemplateStructure) => void
+  /** Controlled selection — when provided, takes precedence over internal state. */
+  selectedId?: string | null
+  onSelectionChange?: (id: string | null) => void
   className?: string
 }
 
 type DragMode = 'move' | 'tl' | 'tr' | 'bl' | 'br' | null
 
 export default function EditableTemplateCanvas({
-  structure, content, onStructureChange, className,
+  structure, content, onStructureChange,
+  selectedId: selectedIdProp, onSelectionChange,
+  className,
 }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null)
+  const isControlled = selectedIdProp !== undefined
+  const selectedId = isControlled ? selectedIdProp : internalSelectedId
+  function setSelectedId(id: string | null) {
+    if (!isControlled) setInternalSelectedId(id)
+    onSelectionChange?.(id)
+  }
+
   const [dragMode, setDragMode] = useState<DragMode>(null)
   const dragStateRef = useRef<{
     elementId: string
@@ -49,36 +60,6 @@ export default function EditableTemplateCanvas({
     startEl: TemplateElement
     canvasRect: DOMRect
   } | null>(null)
-
-  const selected = selectedId
-    ? structure.elements.find(e => e.id === selectedId)
-    : null
-
-  // Track canvas rect for the floating toolbar positioning
-  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null)
-  useEffect(() => {
-    function updateRect() {
-      if (canvasRef.current) setCanvasRect(canvasRef.current.getBoundingClientRect())
-    }
-    updateRect()
-    window.addEventListener('resize', updateRect)
-    window.addEventListener('scroll', updateRect, true)
-    return () => {
-      window.removeEventListener('resize', updateRect)
-      window.removeEventListener('scroll', updateRect, true)
-    }
-  }, [selectedId])
-
-  function applyPatch(patch: Partial<TemplateElement>) {
-    if (!selected) return
-    const updated: TemplateStructure = {
-      ...structure,
-      elements: structure.elements.map(x =>
-        x.id === selected.id ? ({ ...x, ...patch } as TemplateElement) : x
-      ),
-    }
-    onStructureChange(updated)
-  }
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const state = dragStateRef.current
@@ -219,7 +200,7 @@ export default function EditableTemplateCanvas({
       </div>
 
       {/* Helper text — also hidden during export */}
-      {!selected && (
+      {!selectedId && (
         <div
           data-editor-overlay
           style={{
@@ -239,15 +220,6 @@ export default function EditableTemplateCanvas({
           Clique num elemento pra mover ou redimensionar
         </div>
       )}
-
-      {/* Floating toolbar for selected element — rendered in screen space,
-          tagged with data-editor-overlay so it's hidden during export. */}
-      <EditableElementToolbar
-        element={selected ?? null}
-        canvasRect={canvasRect}
-        onChange={applyPatch}
-        onClose={() => setSelectedId(null)}
-      />
     </div>
   )
 }
