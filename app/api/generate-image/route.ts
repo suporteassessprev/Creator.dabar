@@ -8,6 +8,7 @@ import {
   GeminiKeyMissingError,
   MISSING_GEMINI_KEY_MESSAGE,
 } from '@/lib/gemini'
+import { sanitizeErrorMessage } from '@/lib/sanitize-error'
 
 async function generateImage(enhancedPrompt: string): Promise<string | null> {
   const genAI = new GoogleGenerativeAI(getServerGeminiKey())
@@ -69,9 +70,10 @@ export async function POST(req: NextRequest) {
       console.error('[api/generate-image] GEMINI_API_KEY missing')
       return NextResponse.json({ error: MISSING_GEMINI_KEY_MESSAGE }, { status: 503 })
     }
-    console.error('Image generation error:', error?.message ?? 'unknown')
+    const detail = sanitizeErrorMessage(error, 'Erro ao gerar imagem. Tente novamente.')
+    console.error('Image generation error:', detail)
     return NextResponse.json(
-      { error: 'Erro ao gerar imagem. Tente novamente.' },
+      { error: `Erro ao gerar imagem: ${detail}` },
       { status: 500 }
     )
   }

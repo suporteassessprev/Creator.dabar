@@ -8,6 +8,7 @@ import {
   GeminiKeyMissingError,
   MISSING_GEMINI_KEY_MESSAGE,
 } from '@/lib/gemini'
+import { sanitizeErrorMessage } from '@/lib/sanitize-error'
 
 async function callGemini(prompt: string): Promise<string> {
   const genAI = new GoogleGenerativeAI(getServerGeminiKey())
@@ -92,9 +93,10 @@ export async function POST(req: NextRequest) {
     }
     // Log only the message — avoid serializing full error objects that may
     // contain request/response payloads with the key.
-    console.error('Generate error:', error?.message ?? 'unknown')
+    const detail = sanitizeErrorMessage(error, 'Erro ao gerar conteúdo. Tente novamente.')
+    console.error('Generate error:', detail)
     return NextResponse.json(
-      { error: 'Erro ao gerar conteúdo. Tente novamente.' },
+      { error: `Erro ao gerar conteúdo: ${detail}` },
       { status: 500 }
     )
   }
