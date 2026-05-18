@@ -58,11 +58,50 @@ export function fillTemplate(
   })
 }
 
+/**
+ * Required placeholders per prompt type. If the admin saved a prompt
+ * that's missing one of these (easy to do accidentally — the editor
+ * doesn't enforce it), we'd send Gemini instructions without the user
+ * input and get back "Estou pronto, me forneça o comando" or similar.
+ *
+ * Build with these as a safety net: if any required var is set but
+ * its placeholder isn't in the template, append a structured INPUT
+ * block at the end so the model always sees the user's data.
+ */
+const REQUIRED_PLACEHOLDERS: Record<PromptType, string[]> = {
+  creative_copy:   ['topic'],
+  carousel_copy:   ['topic'],
+  creative_image:  ['imagePrompt'],
+  carousel_image:  ['imagePrompt'],
+}
+
 /** One-shot helper: fetch + fill in one call. */
 export async function buildPrompt(
   type: PromptType,
   vars: Record<string, string | number>
 ): Promise<string> {
   const template = await getActivePrompt(type)
-  return fillTemplate(template, vars)
+  const filled = fillTemplate(template, vars)
+
+  const required = REQUIRED_PLACEHOLDERS[type] ?? []
+  const missing = required.filter(key => {
+    const hasPlaceholder = template.includes(`{{${key}}}`)
+    const valProvided    = vars[key] !== undefined && String(vars[key]).trim() !== ''
+    return valProvided && !hasPlaceholder
+  })
+
+  if (missing.length === 0) return filled
+
+  // Safety net — admin's template forgot a placeholder; append the
+  // user input explicitly so Gemini doesn't end up waiting for it.
+  const inputBlock = missing
+    .map(key => `${key.toUpperCase()}: ${vars[key]}`)
+    .concat(
+      Object.entries(vars)
+        .filter(([k, v]) => !missing.includes(k) && !template.includes(`{{${k}}}`) && String(v ?? '').trim() !== '')
+        .map(([k, v]) => `${k.toUpperCase()}: ${v}`)
+    )
+    .join('\n')
+
+  return `${filled}\n\n[INPUT DO USUÁRIO]\n${inputBlock}\n\nRetorne APENAS o JSON pedido, sem texto adicional.`
 }
