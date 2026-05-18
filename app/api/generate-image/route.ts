@@ -32,8 +32,11 @@ export async function POST(req: NextRequest) {
     // SECURITY: never read or honor a client-supplied apiKey.
     const { prompt, mode = 'carousel' } = body
 
-    if (!prompt) {
-      return NextResponse.json({ error: 'prompt é obrigatório' }, { status: 400 })
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 3) {
+      return NextResponse.json(
+        { error: 'prompt da imagem está vazio ou muito curto. Isso costuma acontecer quando o prompt de copy em /admin/prompts não pediu o campo "imagePrompt".' },
+        { status: 400 }
+      )
     }
 
     // ── Plan & credit check ──────────────────────────────────

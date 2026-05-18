@@ -270,6 +270,7 @@ export default function PromptForm({ initial }: Props) {
             <p className="text-[10px] text-gray-500 mt-1.5">
               Use <code className="text-purple-400">{`{{variavel}}`}</code> para placeholders substituídos automaticamente na geração
             </p>
+            <PromptContract type={type} />
           </div>
 
           {/* Inline test panel */}
@@ -415,6 +416,53 @@ export default function PromptForm({ initial }: Props) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Shows the contract the saved prompt must respect: required input
+ * placeholders + expected JSON output shape. This used to be tribal
+ * knowledge — admin would save a prompt missing {{topic}} or asking
+ * for "titulo" instead of "headline" and the generator would silently
+ * produce a blank carousel.
+ */
+function PromptContract({ type }: { type: PromptType }) {
+  const contracts: Record<PromptType, { placeholders: string[]; output: string }> = {
+    creative_copy: {
+      placeholders: ['{{topic}}', '{{tone}}', '{{audience}}'],
+      output: '{"headline":"...","subtitle":"...","cta":"...","imagePrompt":"..."}',
+    },
+    carousel_copy: {
+      placeholders: ['{{topic}}', '{{tone}}', '{{audience}}', '{{slideCount}}'],
+      output: '{"title":"...","slides":[{"title":"...","content":"...","imagePrompt":"..."}]}',
+    },
+    creative_image: {
+      placeholders: ['{{imagePrompt}}'],
+      output: '(retorno é uma imagem — o prompt é só passado pro Nano Banana)',
+    },
+    carousel_image: {
+      placeholders: ['{{imagePrompt}}'],
+      output: '(retorno é uma imagem — o prompt é só passado pro Nano Banana)',
+    },
+  }
+  const c = contracts[type]
+  return (
+    <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
+      <p className="font-semibold text-amber-300">⚠ Contrato obrigatório para "{type}"</p>
+      <div>
+        <span className="text-gray-400">Placeholders esperados: </span>
+        {c.placeholders.map(p => (
+          <code key={p} className="text-purple-300 mx-1">{p}</code>
+        ))}
+      </div>
+      <div>
+        <span className="text-gray-400">JSON de saída: </span>
+        <code className="text-emerald-300 break-all">{c.output}</code>
+      </div>
+      <p className="text-[10px] text-gray-500">
+        Se faltar campo ou usar nome diferente (ex.: "titulo" no lugar de "headline"), a geração falha com erro descritivo.
+      </p>
     </div>
   )
 }

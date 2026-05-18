@@ -20,6 +20,46 @@ async function callGemini(prompt: string): Promise<string> {
 
 // extractJson moved to lib/extract-json.ts (extractJsonFromAi).
 
+/** Returns true when v is a non-empty trimmed string. */
+function nonEmpty(v: unknown): v is string {
+  return typeof v === 'string' && v.trim().length > 0
+}
+
+/**
+ * Validates a creative_copy response shape. The admin-customized
+ * prompt might return JSON with the wrong key names ("titulo" instead
+ * of "headline") or empty values — that used to land the user in the
+ * editor with everything blank and a broken image_slot. Catch it here.
+ */
+function validateCreative(c: any, promptSnippet: string): void {
+  if (!c || typeof c !== 'object') {
+    throw new Error(
+      `IA retornou resposta sem objeto JSON. Verifique seu prompt em /admin/prompts → creative_copy — ele precisa pedir um JSON com chaves "headline", "subtitle", "cta", "imagePrompt". Prompt enviado começa com: "${promptSnippet}"`
+    )
+  }
+  const missing: string[] = []
+  if (!nonEmpty(c.headline))    missing.push('headline')
+  if (!nonEmpty(c.subtitle))    missing.push('subtitle')
+  if (!nonEmpty(c.imagePrompt)) missing.push('imagePrompt')
+  if (missing.length > 0) {
+    throw new Error(
+      `IA retornou JSON sem os campos obrigatórios: ${missing.join(', ')}. Verifique seu prompt em /admin/prompts → creative_copy — ele precisa pedir um JSON com chaves "headline", "subtitle", "cta", "imagePrompt".`
+    )
+  }
+}
+
+function validateCarousel(p: any): void {
+  if (!p || typeof p !== 'object' || !Array.isArray(p.slides) || p.slides.length === 0) {
+    throw new Error(
+      'IA retornou resposta sem o array "slides". Verifique seu prompt em /admin/prompts → carousel_copy — ele precisa pedir um JSON com "title" e "slides" (array de {title, content, imagePrompt}).'
+    )
+  }
+  const emptySlide = p.slides.find((s: any) => !nonEmpty(s?.title) || !nonEmpty(s?.content))
+  if (emptySlide) {
+    throw new Error('Pelo menos um slide veio sem title ou content. Verifique seu prompt — cada slide precisa ter "title" e "content" não-vazios.')
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -55,6 +95,7 @@ export async function POST(req: NextRequest) {
       const creative = extractJsonFromAi(text) as {
         headline: string; subtitle: string; cta: string; imagePrompt: string
       }
+      validateCreative(creative, prompt.slice(0, 120).replace(/\s+/g, ' '))
 
       if (session) {
         await consumeCredit(session.userId, 'generate_text', {
@@ -73,6 +114,7 @@ export async function POST(req: NextRequest) {
     })
     const text   = await callGemini(prompt)
     const parsed = extractJsonFromAi(text) as { title: string; slides: unknown[] }
+    validateCarousel(parsed)
 
     if (session) {
       await consumeCredit(session.userId, 'generate_text', {
