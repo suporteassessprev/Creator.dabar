@@ -66,6 +66,14 @@ export interface ImageSlotElement extends BaseElement {
   type: 'image_slot'
   description: string    // "Imagem gerada pela IA — fundo inteiro do anúncio"
   objectFit?: 'cover' | 'contain' | 'fill'
+  /**
+   * Inner image positioning when objectFit='cover' (default) and the
+   * source image is larger than the slot. Values 0-100 represent the
+   * focal point % — e.g. (50, 30) keeps the upper-third of the image
+   * visible, useful for not cropping faces.
+   */
+  objectPositionX?: number  // 0-100, default 50
+  objectPositionY?: number  // 0-100, default 50
   borderRadius?: number  // px
   overlay?: string       // e.g. "rgba(0,0,0,0.4)" — drawn on top of image
   opacity?: number       // 0-1, on the image itself
