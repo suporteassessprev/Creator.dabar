@@ -447,6 +447,7 @@ function PromptContract({ type }: { type: PromptType }) {
     },
   }
   const c = contracts[type]
+  if (!c) return null
   return (
     <div className="mt-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-2">
       <p className="font-semibold text-amber-300">⚠ Contrato obrigatório para "{type}"</p>
