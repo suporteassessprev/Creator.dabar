@@ -188,11 +188,16 @@ function EditorContent() {
     }
   }
 
+  // Parsed template (used for thumbnails too — if it exists, show
+  // each slide rendered via TemplateRenderer instead of the legacy
+  // SlidePreview which doesn't know about the new structure).
+  const parsedTpl = parseStructure(carousel.templateStructure ?? null)
+
   return (
     <AppLayout>
       <div className="flex h-screen overflow-hidden">
         {/* Slide strip (left) */}
-        <div className="w-28 border-r border-white/5 flex flex-col overflow-y-auto py-4 px-2 gap-2 bg-black/20">
+        <div className="w-24 shrink-0 border-r border-white/5 flex flex-col overflow-y-auto py-4 px-2 gap-2 bg-black/20">
           {carousel.slides.map((slide, i) => (
             <div key={slide.id} className="relative">
               <div
@@ -201,7 +206,22 @@ function EditorContent() {
                   i === activeSlideIndex ? 'ring-2 ring-blue-500' : 'opacity-60 hover:opacity-100'
                 }`}
               >
-                <SlidePreview slide={slide} index={i} size="sm" format={carousel.format} />
+                {parsedTpl ? (
+                  <div className="pointer-events-none">
+                    <TemplateRenderer
+                      structure={parsedTpl}
+                      content={{
+                        headline: slide.title,
+                        subtitle: slide.subtitle ?? slide.content,
+                        cta:      slide.cta,
+                        imageUrl: slide.imageUrl,
+                      }}
+                      showImageSlotHint={false}
+                    />
+                  </div>
+                ) : (
+                  <SlidePreview slide={slide} index={i} size="sm" format={carousel.format} />
+                )}
               </div>
               <div className="text-center text-xs text-gray-600 mt-1">{i + 1}</div>
             </div>
@@ -209,7 +229,7 @@ function EditorContent() {
         </div>
 
         {/* Main canvas */}
-        <div className="flex-1 flex flex-col bg-[#0a0a0f]">
+        <div className="flex-1 min-w-0 flex flex-col bg-[#0a0a0f]">
           {/* Toolbar */}
           <div className="flex items-center gap-3 px-6 py-3 border-b border-white/5 glass-dark">
             <button
@@ -325,7 +345,7 @@ function EditorContent() {
         </div>
 
         {/* Right panel: editor */}
-        <div className="w-80 border-l border-white/5 flex flex-col glass-dark overflow-hidden">
+        <div className="w-72 shrink-0 border-l border-white/5 flex flex-col glass-dark overflow-hidden">
           {/* Element editor (when template structure exists) */}
           {carousel.templateStructure && (() => {
             const tpl = parseStructure(carousel.templateStructure)
