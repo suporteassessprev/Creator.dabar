@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import AppLayout from '@/components/AppLayout'
 import SlidePreview from '@/components/SlidePreview'
 import TemplateRenderer from '@/components/TemplateRenderer'
 import EditableTemplateCanvas from '@/components/EditableTemplateCanvas'
@@ -99,14 +98,12 @@ function EditorContent() {
 
   if (!carousel) {
     return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-center">
-            <Loader2 size={40} className="animate-spin text-blue-400 mx-auto mb-4" />
-            <p className="text-gray-400">Carregando carrossel...</p>
-          </div>
+      <div className="flex items-center justify-center h-screen bg-[#0a0a0f]">
+        <div className="text-center">
+          <Loader2 size={40} className="animate-spin text-blue-400 mx-auto mb-4" />
+          <p className="text-gray-400">Carregando carrossel...</p>
         </div>
-      </AppLayout>
+      </div>
     )
   }
 
@@ -194,7 +191,7 @@ function EditorContent() {
   const parsedTpl = parseStructure(carousel.templateStructure ?? null)
 
   return (
-    <AppLayout>
+    <div className="bg-[#0a0a0f] h-screen">
       <div className="flex h-screen overflow-hidden">
         {/* Slide strip (left) */}
         <div className="w-24 shrink-0 border-r border-white/5 flex flex-col overflow-y-auto py-4 px-2 gap-2 bg-black/20">
@@ -682,7 +679,7 @@ function EditorContent() {
           onClose={() => setTemplatePickerOpen(false)}
         />
       )}
-    </AppLayout>
+    </div>
   )
 }
 

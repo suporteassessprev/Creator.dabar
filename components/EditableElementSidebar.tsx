@@ -155,12 +155,12 @@ function TextControls({
         </select>
       </div>
 
-      {/* Font size */}
+      {/* Font size — input numérico + slider */}
       <div>
         <label className="text-[10px] uppercase tracking-wider text-gray-500 mb-1.5 block font-semibold">
           Tamanho
         </label>
-        <div className="flex items-center bg-white/5 border border-white/10 rounded-lg">
+        <div className="flex items-center bg-white/5 border border-white/10 rounded-lg mb-2">
           <button
             onClick={() => onChange({ fontSize: Math.max(8, fontSize - 4) })}
             className="px-3 py-2 hover:bg-white/10 text-gray-300 transition-colors"
@@ -169,9 +169,17 @@ function TextControls({
           >
             <Minus size={14} />
           </button>
-          <span className="flex-1 text-center text-sm font-mono text-gray-200">
-            {fontSize}
-          </span>
+          <input
+            type="number"
+            min={8}
+            max={200}
+            value={fontSize}
+            onChange={e => {
+              const v = parseInt(e.target.value, 10)
+              if (!Number.isNaN(v)) onChange({ fontSize: Math.max(8, Math.min(200, v)) })
+            }}
+            className="flex-1 bg-transparent text-center text-sm font-mono text-gray-200 outline-none border-x border-white/10 py-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          />
           <button
             onClick={() => onChange({ fontSize: Math.min(200, fontSize + 4) })}
             className="px-3 py-2 hover:bg-white/10 text-gray-300 transition-colors"
@@ -181,6 +189,16 @@ function TextControls({
             <Plus size={14} />
           </button>
         </div>
+        <input
+          type="range"
+          min={8}
+          max={200}
+          step={1}
+          value={fontSize}
+          onChange={e => onChange({ fontSize: Number(e.target.value) })}
+          className="w-full accent-blue-500"
+          title="Arraste pra ajustar"
+        />
       </div>
 
       {/* Weight */}
