@@ -147,10 +147,13 @@ function ImageSlotNode({
   // Priority: admin preview > user-supplied content > placeholder
   const imageSrc = previewSrc ?? content?.imageUrl
   const hasImage = !!imageSrc
+  const posX = el.objectPositionX ?? 50
+  const posY = el.objectPositionY ?? 50
   const innerStyle: CSSProperties = {
     width: '100%',
     height: '100%',
     objectFit: el.objectFit ?? 'cover',
+    objectPosition: `${posX}% ${posY}%`,
     opacity: el.opacity ?? 1,
     borderRadius: `${el.borderRadius ?? 0}px`,
     display: 'block',

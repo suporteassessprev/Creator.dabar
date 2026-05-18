@@ -157,12 +157,18 @@ function EditorContent() {
 
   const handleExport = async () => {
     if (!slideRef.current) return
+    // Hide editor handles/overlays/selection rings while we capture — they
+    // pollute the exported image. The EditableTemplateCanvas tags its
+    // overlay with [data-editor-overlay] which we toggle off temporarily.
+    const overlays = slideRef.current.querySelectorAll<HTMLElement>('[data-editor-overlay]')
+    overlays.forEach(o => { o.style.visibility = 'hidden' })
     try {
       const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(slideRef.current, {
         scale: 3,
         useCORS: true,
         allowTaint: true,
+        backgroundColor: null, // preserve transparency where applicable
       })
       const link = document.createElement('a')
       link.download = `slide-${activeSlideIndex + 1}.png`
@@ -170,6 +176,8 @@ function EditorContent() {
       link.click()
     } catch (e) {
       console.error('Export error:', e)
+    } finally {
+      overlays.forEach(o => { o.style.visibility = '' })
     }
   }
 

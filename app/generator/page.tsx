@@ -626,7 +626,10 @@ function ChatInput({
     }
     const rec = new SR()
     rec.lang = 'pt-BR'
-    rec.continuous = false
+    // Continuous = true mantém a gravação rodando mesmo com pausas
+    // longas. Sem isso, o navegador encerra rápido após qualquer silêncio.
+    // A pessoa para manualmente clicando no mic novamente.
+    rec.continuous = true
     rec.interimResults = true
     rec.maxAlternatives = 1
     recognitionRef.current = rec
