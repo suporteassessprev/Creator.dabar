@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   Plus, RefreshCw, Loader2, AlertCircle,
   Edit2, Copy, Trash2, Eye, EyeOff,
-  ToggleLeft, ToggleRight, Filter, Sparkles,
+  ToggleLeft, ToggleRight, Filter, Sparkles, Wand2,
 } from 'lucide-react'
 
 /* ─── Types ─────────────────────────────────────────── */
@@ -202,6 +202,11 @@ export default function AdminTemplatesPage() {
   const [filterMode,      setFilterMode]      = useState('all')
   const [filterPublished, setFilterPublished] = useState('all')
 
+  // Seed preset state — fires the curated /api/admin/templates/seed-presets
+  // endpoint and refreshes the list.
+  const [seeding, setSeeding] = useState(false)
+  const [seedResult, setSeedResult] = useState<string>('')
+
   const fetchTemplates = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -221,6 +226,26 @@ export default function AdminTemplatesPage() {
   }, [filterMode, filterPublished])
 
   useEffect(() => { fetchTemplates() }, [fetchTemplates])
+
+  async function handleSeedPresets() {
+    setSeeding(true)
+    setSeedResult('')
+    try {
+      const res = await fetch('/api/admin/templates/seed-presets', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erro ao criar templates')
+      setSeedResult(
+        data.created > 0
+          ? `${data.created} template(s) criado(s) — publique pra liberar pros usuários.`
+          : `Nenhum novo. Os ${data.skipped} já existem.`
+      )
+      await fetchTemplates()
+    } catch (e: any) {
+      setSeedResult(`Erro: ${e.message}`)
+    } finally {
+      setSeeding(false)
+    }
+  }
 
   async function handleDelete(id: string) {
     const res = await fetch(`/api/admin/templates/${id}`, { method: 'DELETE' })
@@ -279,6 +304,15 @@ export default function AdminTemplatesPage() {
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
             Atualizar
           </button>
+          <button
+            onClick={handleSeedPresets}
+            disabled={seeding}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold glass border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 transition-all disabled:opacity-50"
+            title="Cria 6 templates de exemplo (MyPostFlow + Notícia Urgente) no banco. Idempotente — não duplica."
+          >
+            {seeding ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
+            Seedar exemplos
+          </button>
           <Link
             href="/admin/templates/from-image"
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold glass border border-purple-500/30 text-purple-300 hover:bg-purple-500/10 transition-all"
@@ -294,6 +328,12 @@ export default function AdminTemplatesPage() {
           </Link>
         </div>
       </div>
+
+      {seedResult && (
+        <div className="mb-4 px-4 py-2 rounded-lg glass border border-amber-500/30 text-amber-200 text-sm">
+          {seedResult}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
