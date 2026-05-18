@@ -18,7 +18,10 @@ export default function CarouselCard({ carousel, onDelete }: CarouselCardProps) 
     })
   }
 
-  const previewSlides = carousel.slides.slice(0, 3)
+  // Guard against legacy carousels saved with undefined slides or
+  // slide fields (e.g. when the AI returned empty headlines).
+  const slides = Array.isArray(carousel.slides) ? carousel.slides : []
+  const previewSlides = slides.slice(0, 3)
 
   return (
     <div className="glass rounded-2xl overflow-hidden hover:bg-white/10 transition-all group hover:-translate-y-1">
@@ -47,7 +50,7 @@ export default function CarouselCard({ carousel, onDelete }: CarouselCardProps) 
                       className="text-xs font-bold text-center leading-tight"
                       style={{ color: slide.textColor }}
                     >
-                      {slide.title.slice(0, 20)}
+                      {(slide.title ?? '').slice(0, 20) || '—'}
                     </p>
                   </div>
                 )}
@@ -101,7 +104,7 @@ export default function CarouselCard({ carousel, onDelete }: CarouselCardProps) 
         <div className="flex items-center justify-between text-xs text-gray-500">
           <div className="flex items-center gap-1">
             <Layers size={12} />
-            <span>{carousel.slides.length} slides</span>
+            <span>{slides.length} slides</span>
           </div>
           <div className="flex items-center gap-1">
             <Clock size={12} />
