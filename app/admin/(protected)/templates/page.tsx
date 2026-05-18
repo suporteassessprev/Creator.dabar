@@ -308,7 +308,7 @@ export default function AdminTemplatesPage() {
             onClick={handleSeedPresets}
             disabled={seeding}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold glass border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 transition-all disabled:opacity-50"
-            title="Cria 5 templates de exemplo (estilo MyPostFlow) no banco. Idempotente — não duplica."
+            title="Cria 6 templates de exemplo (MyPostFlow + Notícia Urgente) no banco. Idempotente — não duplica."
           >
             {seeding ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
             Seedar exemplos
