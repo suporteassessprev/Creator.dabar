@@ -99,39 +99,57 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
   const innerRef  = useRef<HTMLSpanElement>(null)
   const [fontCqw, setFontCqw] = useState(baseFontCqw)
 
-  useLayoutEffect(() => {
-    setFontCqw(baseFontCqw)
-  }, [baseFontCqw, text, el.width, el.height])
-
+  /**
+   * Re-measure & shrink whenever:
+   *  - text changes (user typed, or AI populated content)
+   *  - container is resized (image loaded, viewport changed, layout settled)
+   *  - relevant style deps changed (font family, weight, element box)
+   *
+   * The first render after AI generation used to miss this because
+   * clientHeight could be 0 (container still computing). ResizeObserver
+   * catches the moment the container has real dimensions and re-runs.
+   */
   useLayoutEffect(() => {
     const box = boxRef.current
     const inner = innerRef.current
     if (!box || !inner) return
 
-    // Already at base; check overflow and shrink if needed.
-    let lo = 0.25 * baseFontCqw   // floor: don't go below 25% of base
-    let hi = baseFontCqw
-    let best = baseFontCqw
+    const runAutoFit = () => {
+      // If the container has no measurable height yet, bail — the
+      // ResizeObserver will trigger us again once it does.
+      if (box.clientHeight < 4 || box.clientWidth < 4) return
 
-    const fits = (size: number): boolean => {
-      inner.style.fontSize = `${size}cqw`
-      // 1px tolerance to account for sub-pixel rounding
-      return inner.scrollHeight <= box.clientHeight + 1
-          && inner.scrollWidth  <= box.clientWidth  + 1
-    }
+      let lo = 0.25 * baseFontCqw   // floor: 25% of admin's base
+      let hi = baseFontCqw
+      let best = baseFontCqw
 
-    if (fits(hi)) {
-      best = hi
-    } else {
-      // Binary search for the largest size that fits.
-      for (let i = 0; i < 8; i++) {
-        const mid = (lo + hi) / 2
-        if (fits(mid)) { best = mid; lo = mid } else { hi = mid }
+      const fits = (size: number): boolean => {
+        inner.style.fontSize = `${size}cqw`
+        return inner.scrollHeight <= box.clientHeight + 1
+            && inner.scrollWidth  <= box.clientWidth  + 1
       }
+
+      if (fits(hi)) {
+        best = hi
+      } else {
+        for (let i = 0; i < 10; i++) {
+          const mid = (lo + hi) / 2
+          if (fits(mid)) { best = mid; lo = mid } else { hi = mid }
+        }
+      }
+      inner.style.fontSize = `${best}cqw`
+      setFontCqw(best)
     }
-    inner.style.fontSize = `${best}cqw`
-    setFontCqw(best)
-    // Re-run whenever the relevant inputs change.
+
+    // Run once immediately (covers manual edits / fast paths).
+    runAutoFit()
+
+    // Re-run whenever the box resizes. Critical for the initial render
+    // after AI generation: container dimensions may not be settled yet
+    // when the component mounts.
+    const ro = new ResizeObserver(runAutoFit)
+    ro.observe(box)
+    return () => ro.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, baseFontCqw, el.width, el.height, el.fontFamily, el.fontWeight])
 
@@ -160,8 +178,12 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
     wordBreak: 'break-word',
   }
   return (
-    <div ref={boxRef} style={style}>
-      <span ref={innerRef} style={{ display: 'inline-block', maxWidth: '100%' }}>
+    <div ref={boxRef} style={style} data-autofit-box>
+      <span
+        ref={innerRef}
+        data-autofit-text
+        style={{ display: 'inline-block', maxWidth: '100%' }}
+      >
         {segments.map((seg, i) => (
           <span key={i} style={seg.accent ? { color: accentColor } : undefined}>
             {seg.text}

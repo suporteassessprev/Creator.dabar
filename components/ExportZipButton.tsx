@@ -61,12 +61,26 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
         const el = slideEls[i] as HTMLElement
         setProgress(Math.round(((i + 1) / slideEls.length) * 90))
 
-        const canvas = await html2canvas(el, {
-          useCORS:         true,
-          allowTaint:      true,
-          backgroundColor: null,
-          scale:           2,  // 2x for sharper export
+        // html2canvas doesn't resolve cqw — freeze each auto-fit text
+        // span to its computed pixel size before capture, restore after.
+        const autofitNodes = el.querySelectorAll<HTMLElement>('[data-autofit-text]')
+        const restore: { node: HTMLElement; original: string }[] = []
+        autofitNodes.forEach(n => {
+          restore.push({ node: n, original: n.style.fontSize })
+          n.style.fontSize = window.getComputedStyle(n).fontSize
         })
+
+        let canvas
+        try {
+          canvas = await html2canvas(el, {
+            useCORS:         true,
+            allowTaint:      true,
+            backgroundColor: null,
+            scale:           2,
+          })
+        } finally {
+          restore.forEach(({ node, original }) => { node.style.fontSize = original })
+        }
 
         const blob = await new Promise<Blob>((res) =>
           canvas.toBlob(b => res(b!), 'image/png', 0.95)
