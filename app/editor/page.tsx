@@ -197,12 +197,32 @@ function EditorContent() {
     })
 
     try {
+      // Wait for any pending Google Fonts to finish loading. Without
+      // this, html2canvas may snapshot before the font is ready and
+      // fall back to Arial — the export font ends up different from
+      // what shows on screen.
+      if (document.fonts?.ready) {
+        await document.fonts.ready
+      }
+
       const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(root, {
         scale: 3,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
+        // html2canvas renders the snapshot inside its own hidden
+        // iframe — the iframe's <head> doesn't inherit the Google
+        // Fonts <link> from the main page. We copy the relevant
+        // <link> tags into the clone so the iframe browser fetches
+        // the same fonts before rasterizing.
+        onclone: (clonedDoc) => {
+          document.head
+            .querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"], link[rel="preconnect"][href*="fonts."]')
+            .forEach(linkEl => {
+              clonedDoc.head.appendChild(linkEl.cloneNode(true))
+            })
+        },
       })
       const link = document.createElement('a')
       link.download = `slide-${activeSlideIndex + 1}.png`
