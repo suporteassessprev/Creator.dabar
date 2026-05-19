@@ -178,8 +178,12 @@ function TextNode({ el, content }: { el: TextElement; content?: TemplateContent 
     wordBreak: 'break-word',
   }
   return (
-    <div ref={boxRef} style={style}>
-      <span ref={innerRef} style={{ display: 'inline-block', maxWidth: '100%' }}>
+    <div ref={boxRef} style={style} data-autofit-box>
+      <span
+        ref={innerRef}
+        data-autofit-text
+        style={{ display: 'inline-block', maxWidth: '100%' }}
+      >
         {segments.map((seg, i) => (
           <span key={i} style={seg.accent ? { color: accentColor } : undefined}>
             {seg.text}

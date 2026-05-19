@@ -174,18 +174,35 @@ function EditorContent() {
 
   const handleExport = async () => {
     if (!slideRef.current) return
+    const root = slideRef.current
     // Hide editor handles/overlays/selection rings while we capture — they
     // pollute the exported image. The EditableTemplateCanvas tags its
     // overlay with [data-editor-overlay] which we toggle off temporarily.
-    const overlays = slideRef.current.querySelectorAll<HTMLElement>('[data-editor-overlay]')
+    const overlays = root.querySelectorAll<HTMLElement>('[data-editor-overlay]')
     overlays.forEach(o => { o.style.visibility = 'hidden' })
+
+    // html2canvas does NOT resolve CSS container queries (cqw units).
+    // We use cqw on auto-fit text so it scales with the canvas — but
+    // when html2canvas captures, the text comes out in the wrong size,
+    // sometimes overflowing the box.
+    // Workaround: read the computed pixel size of every auto-fit text
+    // span via getComputedStyle, apply it as an inline px override, then
+    // restore the cqw value after capture.
+    const autofitNodes = root.querySelectorAll<HTMLElement>('[data-autofit-text]')
+    const restore: { el: HTMLElement; original: string }[] = []
+    autofitNodes.forEach(el => {
+      const computed = window.getComputedStyle(el).fontSize // resolves cqw → px
+      restore.push({ el, original: el.style.fontSize })
+      el.style.fontSize = computed
+    })
+
     try {
       const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(slideRef.current, {
+      const canvas = await html2canvas(root, {
         scale: 3,
         useCORS: true,
         allowTaint: true,
-        backgroundColor: null, // preserve transparency where applicable
+        backgroundColor: null,
       })
       const link = document.createElement('a')
       link.download = `slide-${activeSlideIndex + 1}.png`
@@ -195,6 +212,7 @@ function EditorContent() {
       console.error('Export error:', e)
     } finally {
       overlays.forEach(o => { o.style.visibility = '' })
+      restore.forEach(({ el, original }) => { el.style.fontSize = original })
     }
   }
 
