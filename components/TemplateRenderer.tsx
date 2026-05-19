@@ -207,30 +207,32 @@ function ImageSlotNode({
   const hasImage = !!imageSrc
   const posX = el.objectPositionX ?? 50
   const posY = el.objectPositionY ?? 50
-  const innerStyle: CSSProperties = {
-    width: '100%',
-    height: '100%',
-    objectFit: el.objectFit ?? 'cover',
-    objectPosition: `${posX}% ${posY}%`,
-    opacity: el.opacity ?? 1,
-    borderRadius: `${el.borderRadius ?? 0}px`,
-    display: 'block',
-  }
+  // Map object-fit values to the equivalent background-size keyword.
+  // html2canvas respects background-* correctly but NOT object-fit on
+  // <img>, so we render the image as a background — same visual on
+  // screen, faithful on export.
+  const bgSize = el.objectFit === 'contain'
+    ? 'contain'
+    : el.objectFit === 'fill'
+    ? '100% 100%'
+    : 'cover'
   const containerStyle: CSSProperties = {
     width: '100%',
     height: '100%',
     overflow: 'hidden',
     borderRadius: `${el.borderRadius ?? 0}px`,
     position: 'relative',
-    background: hasImage ? 'transparent' : 'rgba(148, 163, 184, 0.15)',
     border: hasImage ? undefined : '2px dashed rgba(148, 163, 184, 0.4)',
+    backgroundColor: hasImage ? 'transparent' : 'rgba(148, 163, 184, 0.15)',
+    backgroundImage: hasImage ? `url(${imageSrc})` : undefined,
+    backgroundSize: bgSize,
+    backgroundPosition: `${posX}% ${posY}%`,
+    backgroundRepeat: 'no-repeat',
+    opacity: hasImage ? (el.opacity ?? 1) : 1,
   }
   return (
     <div style={containerStyle}>
-      {hasImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={imageSrc!} alt="" style={innerStyle} />
-      ) : showHint ? (
+      {!hasImage && showHint ? (
         <div
           style={{
             position: 'absolute',
