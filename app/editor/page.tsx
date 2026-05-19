@@ -198,36 +198,29 @@ function EditorContent() {
     })
 
     try {
-      // Force-load every font+weight combination actually used in the
-      // slide. document.fonts.ready alone isn't enough — Google Fonts
-      // are split per-weight (Anton Regular vs Anton Black are separate
-      // .woff2 files), and a weight that hasn't been requested by any
-      // visible glyph yet won't be in document.fonts. Without this,
-      // html2canvas falls back to a generic sans-serif on weights the
-      // browser hadn't fetched.
+      // Pre-load all (family, weight) combinations used in the slide
+      // so the @font-face inliner below can see them in document.fonts.
       await ensureFontsLoaded(root)
 
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(root, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: null,
-        // Inject @font-face stylesheets into the clone document so
-        // the iframe browser fetches the same Google Fonts before
-        // rasterizing. The fonts are already cached from the load
-        // above, so this is instant.
-        onclone: (clonedDoc) => {
-          document.head
-            .querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"], link[rel="preconnect"][href*="fonts."]')
-            .forEach(linkEl => {
-              clonedDoc.head.appendChild(linkEl.cloneNode(true))
-            })
+      // Switched from html2canvas → html-to-image. html-to-image inlines
+      // @font-face rules with the actual woff2 bytes as base64, which is
+      // the only way to make web fonts work reliably in DOM screenshots.
+      // It also respects object-fit, object-position, and other modern
+      // CSS that html2canvas mangles.
+      const { toPng } = await import('html-to-image')
+      const dataUrl = await toPng(root, {
+        pixelRatio: 3,
+        cacheBust: true,
+        fetchRequestInit: { mode: 'cors' },
+        // Skip elements we don't want in the export (editor handles).
+        filter: (node) => {
+          if (!(node instanceof HTMLElement)) return true
+          return !node.hasAttribute('data-editor-overlay')
         },
       })
       const link = document.createElement('a')
       link.download = `slide-${activeSlideIndex + 1}.png`
-      link.href = canvas.toDataURL('image/png')
+      link.href = dataUrl
       link.click()
     } catch (e) {
       console.error('Export error:', e)

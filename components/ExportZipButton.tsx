@@ -47,41 +47,31 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
     setProgress(0)
 
     try {
-      // Dynamic imports to avoid SSR issues
-      const [JSZip, html2canvas] = await Promise.all([
+      // Dynamic imports to avoid SSR issues. Switched from html2canvas
+      // to html-to-image for the same reason as in app/editor/page.tsx:
+      // html-to-image inlines @font-face with the actual woff2 bytes
+      // and respects modern CSS (object-fit, etc).
+      const [JSZip, htmlToImage] = await Promise.all([
         import('jszip').then(m => m.default),
-        import('html2canvas').then(m => m.default),
+        import('html-to-image'),
       ])
 
       const zip  = new JSZip()
       const folder = zip.folder(carouselTitle.replace(/[^a-zA-Z0-9]/g, '_'))!
 
-      // Force-load every font+weight used in the slide tree so
-      // html2canvas doesn't fall back to Arial on weights that
-      // Google Fonts splits into separate woff2 files (Anton 900,
-      // Archivo Black, etc).
-      const slideRoot = document.querySelector<HTMLElement>('[data-slide-id]')
-      if (slideRoot) await ensureFontsLoaded(slideRoot)
-
-      // html2canvas snapshots inside its own iframe whose <head> doesn't
-      // inherit our Google Fonts <link>. We copy the relevant <link>
-      // tags into the clone in onclone below.
-      const cloneFontLinks = (clonedDoc: Document) => {
-        document.head
-          .querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"], link[rel="preconnect"][href*="fonts."]')
-          .forEach(linkEl => {
-            clonedDoc.head.appendChild(linkEl.cloneNode(true))
-          })
-      }
-
       const slideEls = document.querySelectorAll('[data-slide-id]')
+
+      // Pre-load fonts once based on the first slide's font usage —
+      // they're all rendered with the same template so a single warm-up
+      // is enough.
+      if (slideEls[0]) await ensureFontsLoaded(slideEls[0] as HTMLElement)
 
       for (let i = 0; i < slideEls.length; i++) {
         const el = slideEls[i] as HTMLElement
         setProgress(Math.round(((i + 1) / slideEls.length) * 90))
 
-        // html2canvas doesn't resolve cqw — freeze each auto-fit text
-        // span to its computed pixel size before capture, restore after.
+        // Freeze cqw → px on auto-fit text (html-to-image also doesn't
+        // resolve container queries, same as html2canvas).
         const autofitNodes = el.querySelectorAll<HTMLElement>('[data-autofit-text]')
         const restore: { node: HTMLElement; original: string }[] = []
         autofitNodes.forEach(n => {
@@ -89,22 +79,22 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
           n.style.fontSize = window.getComputedStyle(n).fontSize
         })
 
-        let canvas
+        let dataUrl: string
         try {
-          canvas = await html2canvas(el, {
-            useCORS:         true,
-            allowTaint:      true,
-            backgroundColor: null,
-            scale:           2,
-            onclone:         cloneFontLinks,
+          dataUrl = await htmlToImage.toPng(el, {
+            pixelRatio: 2,
+            cacheBust:  true,
+            filter: (node) => {
+              if (!(node instanceof HTMLElement)) return true
+              return !node.hasAttribute('data-editor-overlay')
+            },
           })
         } finally {
           restore.forEach(({ node, original }) => { node.style.fontSize = original })
         }
 
-        const blob = await new Promise<Blob>((res) =>
-          canvas.toBlob(b => res(b!), 'image/png', 0.95)
-        )
+        // Convert data URL → blob for JSZip.
+        const blob = await (await fetch(dataUrl)).blob()
 
         const slideTitle = slides[i]?.title?.replace(/[^a-zA-Z0-9]/g, '_') || `slide_${i + 1}`
         folder.file(`${String(i + 1).padStart(2, '0')}_${slideTitle}.png`, blob)
