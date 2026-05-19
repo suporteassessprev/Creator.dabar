@@ -12,6 +12,7 @@ import {
   parseStructure, serializeStructure,
   type TemplateStructure, type TemplateElement,
 } from '@/lib/template-structure'
+import { ensureFontsLoaded } from '@/lib/ensure-fonts'
 import {
   Save, Download, ChevronLeft, ChevronRight,
   Type, Palette, Image, Layout, Loader2,
@@ -197,13 +198,14 @@ function EditorContent() {
     })
 
     try {
-      // Wait for any pending Google Fonts to finish loading. Without
-      // this, html2canvas may snapshot before the font is ready and
-      // fall back to Arial — the export font ends up different from
-      // what shows on screen.
-      if (document.fonts?.ready) {
-        await document.fonts.ready
-      }
+      // Force-load every font+weight combination actually used in the
+      // slide. document.fonts.ready alone isn't enough — Google Fonts
+      // are split per-weight (Anton Regular vs Anton Black are separate
+      // .woff2 files), and a weight that hasn't been requested by any
+      // visible glyph yet won't be in document.fonts. Without this,
+      // html2canvas falls back to a generic sans-serif on weights the
+      // browser hadn't fetched.
+      await ensureFontsLoaded(root)
 
       const html2canvas = (await import('html2canvas')).default
       const canvas = await html2canvas(root, {
@@ -211,11 +213,10 @@ function EditorContent() {
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
-        // html2canvas renders the snapshot inside its own hidden
-        // iframe — the iframe's <head> doesn't inherit the Google
-        // Fonts <link> from the main page. We copy the relevant
-        // <link> tags into the clone so the iframe browser fetches
-        // the same fonts before rasterizing.
+        // Inject @font-face stylesheets into the clone document so
+        // the iframe browser fetches the same Google Fonts before
+        // rasterizing. The fonts are already cached from the load
+        // above, so this is instant.
         onclone: (clonedDoc) => {
           document.head
             .querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"], link[rel="preconnect"][href*="fonts."]')
