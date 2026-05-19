@@ -48,6 +48,12 @@ interface Props {
    * a real image before saving the template.
    */
   previewImages?: Record<string, string>
+  /**
+   * When true, the sticky text layout (stickToPrevious) is disabled.
+   * The admin EditableTemplateCanvas sets this so drag/resize keep
+   * absolute positioning and don't fight with the runtime transform.
+   */
+  disableSticky?: boolean
   className?: string
 }
 
@@ -457,10 +463,79 @@ function ElementNode({
       break
   }
   return (
-    <div style={wrapperStyle} onClick={onClick}>
+    <div
+      style={wrapperStyle}
+      onClick={onClick}
+      data-element-id={el.id}
+      data-element-type={el.type}
+    >
       {node}
     </div>
   )
+}
+
+/**
+ * For each TextElement with stickToPrevious=true, measure the bottom of
+ * the previous text element (sorted by initial y) and translateY this
+ * element so it sits exactly `stickGap` pixels below. Re-runs on
+ * container resize / font-fit changes via ResizeObserver.
+ *
+ * Only runs when `enabled` is true — the admin's EditableTemplateCanvas
+ * disables it so drag/resize don't fight with the dynamic transform.
+ */
+function useStickyTextLayout(
+  containerRef: React.RefObject<HTMLDivElement>,
+  structure: TemplateStructure,
+  enabled: boolean,
+) {
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container || !enabled) return
+
+    const textTypes = new Set(['text_headline', 'text_subtitle', 'text_cta', 'badge'])
+    const textEls = structure.elements
+      .filter(e => textTypes.has(e.type) && e.visible !== false)
+      .sort((a, b) => a.y - b.y) as TextElement[]
+
+    function reflow() {
+      if (!container) return
+      const containerRect = container.getBoundingClientRect()
+      // First pass: clear transforms so measurements reflect the
+      // unshifted natural positions.
+      textEls.forEach(el => {
+        const node = container.querySelector<HTMLElement>(`[data-element-id="${el.id}"]`)
+        if (node) node.style.transform = ''
+      })
+      // Second pass: for each stick-to-previous, snap below the prior.
+      for (let i = 1; i < textEls.length; i++) {
+        const el = textEls[i]
+        if (!el.stickToPrevious) continue
+        const prev = textEls[i - 1]
+        const myNode   = container.querySelector<HTMLElement>(`[data-element-id="${el.id}"]`)
+        const prevNode = container.querySelector<HTMLElement>(`[data-element-id="${prev.id}"]`)
+        if (!myNode || !prevNode) continue
+        const prevRect = prevNode.getBoundingClientRect()
+        const myRect   = myNode.getBoundingClientRect()
+        const gapPx    = el.stickGap ?? 12
+        const targetTop = prevRect.bottom + gapPx
+        const delta = targetTop - myRect.top
+        if (Math.abs(delta) > 0.5) {
+          myNode.style.transform = `translateY(${delta}px)`
+        }
+      }
+    }
+
+    reflow()
+    // Re-run on container resize (handles font auto-fit reflows, image
+    // loading, etc).
+    const ro = new ResizeObserver(reflow)
+    ro.observe(container)
+    structure.elements.forEach(el => {
+      const node = container.querySelector<HTMLElement>(`[data-element-id="${el.id}"]`)
+      if (node) ro.observe(node)
+    })
+    return () => ro.disconnect()
+  }, [containerRef, structure, enabled])
 }
 
 export default function TemplateRenderer({
@@ -470,12 +545,16 @@ export default function TemplateRenderer({
   onElementClick,
   showImageSlotHint = true,
   previewImages,
+  disableSticky = false,
   className,
 }: Props) {
   const aspectRatio = ASPECT_RATIO[structure.canvas.format]
   const sorted = [...structure.elements].sort((a, b) => a.zIndex - b.zIndex)
+  const containerRef = useRef<HTMLDivElement>(null)
+  useStickyTextLayout(containerRef, structure, !disableSticky)
   return (
     <div
+      ref={containerRef}
       className={className}
       style={{
         position: 'relative',

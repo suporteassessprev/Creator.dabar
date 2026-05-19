@@ -689,6 +689,34 @@ function TextPropsPanel({ el, onChange }: { el: TextElement; onChange: (p: Parti
           className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs resize-none focus:outline-none focus:border-blue-500/50"
         />
       </Section>
+      <Section title="Posicionamento dinâmico">
+        <label className="flex items-start gap-2 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={el.stickToPrevious ?? false}
+            onChange={e => onChange({ stickToPrevious: e.target.checked || undefined })}
+            className="mt-0.5"
+          />
+          <div className="flex-1">
+            <div className="font-semibold text-gray-200">Grudar no texto acima</div>
+            <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">
+              Quando ligado, este elemento se ancora logo abaixo do texto anterior
+              (ordenado por Y). Resolve o problema de copy curta deixar buraco
+              gigante: o gap fica constante mesmo quando o texto acima encolhe.
+            </p>
+          </div>
+        </label>
+        {el.stickToPrevious && (
+          <NumField
+            label="Espaço (px)"
+            value={el.stickGap ?? 12}
+            onChange={v => onChange({ stickGap: Math.round(v) })}
+            min={0}
+            max={200}
+            step={1}
+          />
+        )}
+      </Section>
       <Section title="Tipografia">
         <div className="grid grid-cols-2 gap-2">
           <FontField

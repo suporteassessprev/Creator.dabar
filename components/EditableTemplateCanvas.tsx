@@ -166,6 +166,7 @@ export default function EditableTemplateCanvas({
         content={content}
         showImageSlotHint={showImageSlotHint ?? false}
         previewImages={previewImages}
+        disableSticky
       />
 
       {/* Interaction overlay — transparent boxes per element, on top.

@@ -60,6 +60,19 @@ export interface TextElement extends BaseElement {
   paddingX?: number      // px
   paddingY?: number      // px
   opacity?: number       // 0-1
+  /**
+   * When true, the element snaps right below the previous text element
+   * (sorted by initial y). Solves the "long copy overflows, short copy
+   * leaves giant gap" problem: the box's TOP is computed from the prior
+   * element's measured bottom + stickGap, so spacing stays constant
+   * regardless of how much the auto-fit shrinks the text above.
+   * Only applied at render time in the read-only TemplateRenderer —
+   * the admin's EditableTemplateCanvas keeps absolute positioning so
+   * drag/resize work normally.
+   */
+  stickToPrevious?: boolean
+  /** Pixels of gap to leave between this element and the previous one. Default 12. */
+  stickGap?: number
 }
 
 export interface ImageSlotElement extends BaseElement {
