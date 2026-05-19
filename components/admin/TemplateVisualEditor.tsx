@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TemplateRenderer from '@/components/TemplateRenderer'
+import EditableTemplateCanvas from '@/components/EditableTemplateCanvas'
 import {
   TemplateStructure,
   TemplateElement,
@@ -532,22 +533,31 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
         {/* ── Center: canvas ────────────────────────────────────── */}
         <main className="glass rounded-2xl flex items-center justify-center overflow-auto p-6">
           <div className="w-full max-w-md mx-auto">
-            <TemplateRenderer
-              structure={structure}
-              content={previewMode ? {
-                headline: 'HEADLINE DE EXEMPLO',
-                subtitle: 'Subtítulo gerado pela IA aparece aqui',
-                cta:      'QUERO SABER MAIS',
-              } : undefined}
-              selectedId={previewMode ? null : selectedId}
-              onElementClick={previewMode ? undefined : setSelectedId}
-              showImageSlotHint={!previewMode}
-              previewImages={slotPreviews}
-            />
+            {previewMode ? (
+              <TemplateRenderer
+                structure={structure}
+                content={{
+                  headline: 'HEADLINE DE EXEMPLO',
+                  subtitle: 'Subtítulo gerado pela IA aparece aqui',
+                  cta:      'QUERO SABER MAIS',
+                }}
+                showImageSlotHint={false}
+                previewImages={slotPreviews}
+              />
+            ) : (
+              <EditableTemplateCanvas
+                structure={structure}
+                selectedId={selectedId}
+                onSelectionChange={setSelectedId}
+                onStructureChange={(next) => { setStructure(next); markDirty() }}
+                previewImages={slotPreviews}
+                showImageSlotHint={true}
+              />
+            )}
             <div className="mt-3 text-center text-[11px] text-gray-500">
               {previewMode
                 ? 'Preview com dados simulados'
-                : <>Clique num elemento para editar → · <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">⌘V</kbd> cola imagem da área de transferência</>}
+                : <>Arraste pra mover · puxe os cantos pra redimensionar · <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">⌘V</kbd> cola imagem</>}
             </div>
           </div>
         </main>

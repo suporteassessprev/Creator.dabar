@@ -32,6 +32,14 @@ interface Props {
   /** Controlled selection — when provided, takes precedence over internal state. */
   selectedId?: string | null
   onSelectionChange?: (id: string | null) => void
+  /**
+   * Map of image_slot id → preview image data URL. Used by the admin
+   * template editor so the admin can see the slot filled with a sample
+   * image while editing. End-user editor leaves this undefined.
+   */
+  previewImages?: Record<string, string>
+  /** Hint hovering text on empty image_slots (admin only). */
+  showImageSlotHint?: boolean
   className?: string
 }
 
@@ -40,6 +48,7 @@ type DragMode = 'move' | 'tl' | 'tr' | 'bl' | 'br' | null
 export default function EditableTemplateCanvas({
   structure, content, onStructureChange,
   selectedId: selectedIdProp, onSelectionChange,
+  previewImages, showImageSlotHint,
   className,
 }: Props) {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -155,7 +164,8 @@ export default function EditableTemplateCanvas({
       <TemplateRenderer
         structure={structure}
         content={content}
-        showImageSlotHint={false}
+        showImageSlotHint={showImageSlotHint ?? false}
+        previewImages={previewImages}
       />
 
       {/* Interaction overlay — transparent boxes per element, on top.
