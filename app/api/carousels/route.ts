@@ -33,7 +33,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const data = await req.json()
-    const { id, title, topic, mode, format, style, status, slides } = data
+    const {
+      id, title, topic, mode, format, style, status, slides,
+      templateId, templateStructure,
+    } = data
 
     if (!id)    return NextResponse.json({ error: 'id obrigatório' }, { status: 400 })
     if (!title) return NextResponse.json({ error: 'title obrigatório' }, { status: 400 })
@@ -44,20 +47,24 @@ export async function POST(req: NextRequest) {
       create: {
         id,
         title,
-        topic:   topic  ?? '',
-        mode:    mode   ?? 'creative',
-        format:  format ?? 'square',
-        style:   typeof style === 'string' ? style : JSON.stringify(style ?? {}),
-        status:  status ?? 'draft',
-        userId:  session.userId,
+        topic:             topic  ?? '',
+        mode:              mode   ?? 'creative',
+        format:            format ?? 'square',
+        style:             typeof style === 'string' ? style : JSON.stringify(style ?? {}),
+        status:            status ?? 'draft',
+        templateId:        templateId        ?? null,
+        templateStructure: templateStructure ?? null,
+        userId:            session.userId,
       },
       update: {
         title,
-        topic:   topic  ?? '',
-        mode:    mode   ?? 'creative',
-        format:  format ?? 'square',
-        style:   typeof style === 'string' ? style : JSON.stringify(style ?? {}),
-        status:  status ?? 'draft',
+        topic:             topic  ?? '',
+        mode:              mode   ?? 'creative',
+        format:            format ?? 'square',
+        style:             typeof style === 'string' ? style : JSON.stringify(style ?? {}),
+        status:            status ?? 'draft',
+        templateId:        templateId        ?? null,
+        templateStructure: templateStructure ?? null,
       },
     })
 

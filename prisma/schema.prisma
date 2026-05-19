@@ -256,6 +256,13 @@ model Carousel {
   format    String   @default("square")
   style     String
   status    String   @default("draft")
+  // Phase 3+: template the carousel was generated from. Persisting the
+  // full TemplateStructure JSON snapshot lets the user edit the template
+  // (drag/resize/recolor) without those changes leaking into other
+  // carousels — and lets them come back to /editor later without losing
+  // the layout.
+  templateId        String?
+  templateStructure String?
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   slides    Slide[]
