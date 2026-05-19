@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TemplateRenderer from '@/components/TemplateRenderer'
+import EditableTemplateCanvas from '@/components/EditableTemplateCanvas'
 import {
   TemplateStructure,
   TemplateElement,
@@ -532,22 +533,31 @@ export default function TemplateVisualEditor({ templateId, initialMeta, initialS
         {/* ── Center: canvas ────────────────────────────────────── */}
         <main className="glass rounded-2xl flex items-center justify-center overflow-auto p-6">
           <div className="w-full max-w-md mx-auto">
-            <TemplateRenderer
-              structure={structure}
-              content={previewMode ? {
-                headline: 'HEADLINE DE EXEMPLO',
-                subtitle: 'Subtítulo gerado pela IA aparece aqui',
-                cta:      'QUERO SABER MAIS',
-              } : undefined}
-              selectedId={previewMode ? null : selectedId}
-              onElementClick={previewMode ? undefined : setSelectedId}
-              showImageSlotHint={!previewMode}
-              previewImages={slotPreviews}
-            />
+            {previewMode ? (
+              <TemplateRenderer
+                structure={structure}
+                content={{
+                  headline: 'HEADLINE DE EXEMPLO',
+                  subtitle: 'Subtítulo gerado pela IA aparece aqui',
+                  cta:      'QUERO SABER MAIS',
+                }}
+                showImageSlotHint={false}
+                previewImages={slotPreviews}
+              />
+            ) : (
+              <EditableTemplateCanvas
+                structure={structure}
+                selectedId={selectedId}
+                onSelectionChange={setSelectedId}
+                onStructureChange={(next) => { setStructure(next); markDirty() }}
+                previewImages={slotPreviews}
+                showImageSlotHint={true}
+              />
+            )}
             <div className="mt-3 text-center text-[11px] text-gray-500">
               {previewMode
                 ? 'Preview com dados simulados'
-                : <>Clique num elemento para editar → · <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">⌘V</kbd> cola imagem da área de transferência</>}
+                : <>Arraste pra mover · puxe os cantos pra redimensionar · <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[10px]">⌘V</kbd> cola imagem</>}
             </div>
           </div>
         </main>
@@ -826,12 +836,11 @@ function ImageSlotPropsPanel({
         />
         <NumField label="Raio (px)" value={el.borderRadius ?? 0} onChange={v => onChange({ borderRadius: Math.round(v) })} min={0} max={9999} step={1} />
         <NumField label="Opacidade" value={el.opacity ?? 1} onChange={v => onChange({ opacity: v })} min={0} max={1} step={0.05} />
-        <ColorField
-          label="Overlay (rgba)"
-          value={el.overlay ?? ''}
+      </Section>
+      <Section title="Gradient de transição (overlay)">
+        <OverlayPicker
+          value={el.overlay}
           onChange={v => onChange({ overlay: v || undefined })}
-          allowEmpty
-          placeholder="rgba(0,0,0,0.4)"
         />
       </Section>
       {showPromptsModal && <AIPromptsModal onClose={() => setShowPromptsModal(false)} />}
@@ -845,6 +854,106 @@ function ImageSlotPropsPanel({
  * types in parallel. Lets the admin understand WHAT will be sent to
  * Gemini without leaving the visual editor.
  */
+/**
+ * Visual picker for the image_slot overlay (gradient that fades the
+ * AI image into the text area below). The overlay field is a free-form
+ * CSS background string — the picker exposes the common presets so the
+ * admin doesn't need to hand-write linear-gradient(...) syntax.
+ */
+function OverlayPicker({
+  value, onChange,
+}: {
+  value: string | undefined
+  onChange: (next: string) => void
+}) {
+  const presets: { label: string; css: string }[] = [
+    {
+      label: 'Sem overlay',
+      css: '',
+    },
+    {
+      label: 'Fade preto embaixo (forte)',
+      css: 'linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 40%, rgba(0,0,0,0.85) 90%, rgba(0,0,0,1) 100%)',
+    },
+    {
+      label: 'Fade preto embaixo (suave)',
+      css: 'linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 55%, rgba(0,0,0,0.65) 100%)',
+    },
+    {
+      label: 'Fade preto em cima',
+      css: 'linear-gradient(180deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.0) 50%, rgba(0,0,0,0.0) 100%)',
+    },
+    {
+      label: 'Vinheta cima + baixo',
+      css: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.0) 25%, rgba(0,0,0,0.0) 70%, rgba(0,0,0,0.9) 100%)',
+    },
+    {
+      label: 'Diagonal magenta',
+      css: 'linear-gradient(135deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 45%, rgba(217,70,239,0.45) 75%, rgba(10,10,15,0.95) 100%)',
+    },
+    {
+      label: 'Diagonal azul',
+      css: 'linear-gradient(135deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 45%, rgba(14,165,233,0.4) 75%, rgba(10,10,15,0.95) 100%)',
+    },
+    {
+      label: 'Escurecer tudo',
+      css: 'rgba(0,0,0,0.45)',
+    },
+  ]
+
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        {presets.map(p => {
+          const active = (value ?? '') === p.css
+          return (
+            <button
+              key={p.label}
+              onClick={() => onChange(p.css)}
+              className={`relative rounded-lg overflow-hidden border-2 transition-all aspect-[4/3] ${
+                active ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-white/10 hover:border-white/40'
+              }`}
+              type="button"
+              title={p.css || 'Sem overlay'}
+            >
+              {/* Mini-preview: simulated photo backdrop + overlay */}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(120deg, #d97706 0%, #be185d 50%, #1e293b 100%)',
+                }}
+              />
+              {p.css && (
+                <div style={{ position: 'absolute', inset: 0, background: p.css }} />
+              )}
+              <span className="absolute bottom-1 left-1 right-1 text-[9px] text-white font-semibold drop-shadow-md text-left leading-tight">
+                {p.label}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="mt-3">
+        <label className="text-[10px] uppercase tracking-wider text-gray-500 mb-1 block font-semibold">
+          CSS customizado (avançado)
+        </label>
+        <textarea
+          value={value ?? ''}
+          onChange={e => onChange(e.target.value)}
+          rows={2}
+          placeholder="linear-gradient(180deg, ...) ou rgba(0,0,0,0.5)"
+          className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-[10px] font-mono resize-none focus:outline-none focus:border-blue-500/50"
+        />
+        <p className="text-[10px] text-gray-500 mt-1">
+          Qualquer valor CSS de <code className="text-purple-400">background</code> funciona: cor, rgba, linear-gradient, radial-gradient.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function AIPromptsModal({ onClose }: { onClose: () => void }) {
   const [creative, setCreative] = useState<string | null>(null)
   const [carousel, setCarousel] = useState<string | null>(null)
