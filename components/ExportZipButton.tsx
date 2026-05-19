@@ -55,6 +55,23 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
       const zip  = new JSZip()
       const folder = zip.folder(carouselTitle.replace(/[^a-zA-Z0-9]/g, '_'))!
 
+      // Make sure Google Fonts are fully loaded before snapshotting.
+      // html2canvas falls back to Arial if a font is still loading.
+      if (document.fonts?.ready) {
+        await document.fonts.ready
+      }
+
+      // html2canvas snapshots inside its own iframe whose <head> doesn't
+      // inherit our Google Fonts <link>. We copy the relevant <link>
+      // tags into the clone in onclone below.
+      const cloneFontLinks = (clonedDoc: Document) => {
+        document.head
+          .querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis.com"], link[rel="preconnect"][href*="fonts."]')
+          .forEach(linkEl => {
+            clonedDoc.head.appendChild(linkEl.cloneNode(true))
+          })
+      }
+
       const slideEls = document.querySelectorAll('[data-slide-id]')
 
       for (let i = 0; i < slideEls.length; i++) {
@@ -77,6 +94,7 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
             allowTaint:      true,
             backgroundColor: null,
             scale:           2,
+            onclone:         cloneFontLinks,
           })
         } finally {
           restore.forEach(({ node, original }) => { node.style.fontSize = original })
