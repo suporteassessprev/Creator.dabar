@@ -125,15 +125,24 @@ function EditorContent() {
       templateStructure: carousel.templateStructure ?? null,
       templateId:        carousel.templateId ?? null,
     })
-    // Best-effort persist to DB (fire-and-forget — UX doesn't block on it)
+    // Persist the FULL state to DB — title, slides (with imageUrl
+    // + imageHistory), style, format, mode, templateId,
+    // templateStructure. Previously these last two (template-related)
+    // were silently dropped, so coming back to the editor reset every
+    // layout edit. PUT handler accepts them now.
     fetch(`/api/carousels/${carousel.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title:  carousel.title,
-        slides: carousel.slides,
-        style:  JSON.stringify(carousel.style),
-        status: 'ready',
+        title:             carousel.title,
+        topic:             carousel.topic,
+        mode:              carousel.mode,
+        format:            carousel.format,
+        slides:            carousel.slides,
+        style:             JSON.stringify(carousel.style),
+        status:            'ready',
+        templateId:        carousel.templateId ?? null,
+        templateStructure: carousel.templateStructure ?? null,
       }),
     }).catch(() => {})
     setSaved(true)
