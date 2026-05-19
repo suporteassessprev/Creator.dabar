@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { Download, Loader2, Lock, AlertCircle } from 'lucide-react'
+import { ensureFontsLoaded } from '@/lib/ensure-fonts'
 
 interface Slide {
   id: string
@@ -55,11 +56,12 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
       const zip  = new JSZip()
       const folder = zip.folder(carouselTitle.replace(/[^a-zA-Z0-9]/g, '_'))!
 
-      // Make sure Google Fonts are fully loaded before snapshotting.
-      // html2canvas falls back to Arial if a font is still loading.
-      if (document.fonts?.ready) {
-        await document.fonts.ready
-      }
+      // Force-load every font+weight used in the slide tree so
+      // html2canvas doesn't fall back to Arial on weights that
+      // Google Fonts splits into separate woff2 files (Anton 900,
+      // Archivo Black, etc).
+      const slideRoot = document.querySelector<HTMLElement>('[data-slide-id]')
+      if (slideRoot) await ensureFontsLoaded(slideRoot)
 
       // html2canvas snapshots inside its own iframe whose <head> doesn't
       // inherit our Google Fonts <link>. We copy the relevant <link>
