@@ -102,14 +102,23 @@ export default function DashboardPage() {
 
   useEffect(() => { loadFromDb() }, [loadFromDb])
 
-  // Merge: DB items take precedence (fresher), fill with localStorage for items not in DB
-  const allCarousels = usingDb
+  // Merge: DB items take precedence (fresher), fill with localStorage
+  // for items not in DB. Then sort by updatedAt DESC so the dashboard
+  // always shows the most recently touched carousel first — was buggy
+  // before because DB items and local items were concatenated without
+  // a unified sort.
+  const allCarousels = (usingDb
     ? (() => {
         const dbIds = new Set(dbCarousels.map(c => c.id))
         const localOnly = localCarousels.filter(c => !dbIds.has(c.id))
         return [...dbCarousels, ...localOnly] as typeof localCarousels
       })()
     : localCarousels
+  ).slice().sort((a, b) => {
+    const ta = new Date(a.updatedAt || a.createdAt || 0).getTime()
+    const tb = new Date(b.updatedAt || b.createdAt || 0).getTime()
+    return tb - ta // newest first
+  })
 
   const filtered = allCarousels.filter(c => {
     if (filter === 'all') return true
@@ -205,9 +214,9 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Carousels Grid */}
+        {/* Carousels Grid — Netflix-style: fewer columns, cards bigger */}
         {filtered.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-7">
             {filtered.map(carousel => (
               <CarouselCard
                 key={carousel.id}
