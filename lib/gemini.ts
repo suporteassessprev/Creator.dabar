@@ -21,6 +21,8 @@ export interface GeneratedSlideContent {
   title: string
   content: string
   imagePrompt: string
+  cta?: string     // Each slide is its own ad in "Criativos em Massa" → needs its own CTA.
+  subtitle?: string
   hook?: string
 }
 
@@ -136,14 +138,16 @@ export function contentToSlides(
 ): Slide[] {
   return generatedSlides.map((s) =>
     createSlide({
-      title: s.title,
-      content: s.content,
+      title:       s.title,
+      content:     s.content,
+      subtitle:    s.subtitle ?? s.content,
+      cta:         s.cta,                       // Each slide is an independent ad — needs its own CTA.
       imagePrompt: s.imagePrompt,
       backgroundColor: style.backgroundColor,
-      textColor: style.textColor,
-      accentColor: style.primaryColor,
-      fontFamily: style.fontFamily,
-      layout: 'centered',
+      textColor:       style.textColor,
+      accentColor:     style.primaryColor,
+      fontFamily:      style.fontFamily,
+      layout:          'centered',
     })
   )
 }

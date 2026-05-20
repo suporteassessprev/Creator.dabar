@@ -2,27 +2,45 @@
 
 /**
  * Client-side ZIP export.
- * Captures each slide as PNG via html2canvas, packs into ZIP via JSZip.
+ *
+ * Renders EACH slide offscreen via TemplateRenderer, captures it with
+ * html-to-image, packs into ZIP via JSZip. Earlier version looked for
+ * [data-slide-id] in the DOM, but only the active slide is mounted by
+ * the editor — so the ZIP came out empty for every other slide. This
+ * version mounts them all in a fixed offscreen container during export.
+ *
  * Pro / Business feature — shows upgrade prompt otherwise.
  */
 
 import { useState } from 'react'
 import { Download, Loader2, Lock, AlertCircle } from 'lucide-react'
 import { ensureFontsLoaded } from '@/lib/ensure-fonts'
+import { parseStructure, type TemplateStructure } from '@/lib/template-structure'
+import TemplateRenderer from './TemplateRenderer'
 
-interface Slide {
-  id: string
-  title?: string
+interface ExportSlide {
+  id:          string
+  title?:      string
+  subtitle?:   string
+  content?:    string
+  cta?:        string
+  imageUrl?:   string
+  /** Per-slide template override (when the user picked "only this slide"). */
+  templateStructure?: string | null
 }
 
 interface Props {
-  carouselId:  string
-  carouselTitle: string
-  slides:      Slide[]
-  canExport:   boolean  // from plan info
+  carouselId:        string
+  carouselTitle:     string
+  slides:            ExportSlide[]
+  /** Carousel-level template — applies to slides without an override. */
+  templateStructure: string | null
+  canExport:         boolean
 }
 
-export default function ExportZipButton({ carouselId, carouselTitle, slides, canExport }: Props) {
+export default function ExportZipButton({
+  carouselId, carouselTitle, slides, templateStructure, canExport,
+}: Props) {
   const [loading,  setLoading]  = useState(false)
   const [progress, setProgress] = useState(0)
   const [error,    setError]    = useState<string | null>(null)
@@ -46,33 +64,82 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
     setError(null)
     setProgress(0)
 
+    let cleanup: (() => void) | null = null
+
     try {
-      // Dynamic imports to avoid SSR issues. Switched from html2canvas
-      // to html-to-image for the same reason as in app/editor/page.tsx:
-      // html-to-image inlines @font-face with the actual woff2 bytes
-      // and respects modern CSS (object-fit, etc).
-      const [JSZip, htmlToImage] = await Promise.all([
+      const [JSZip, htmlToImage, ReactDOM] = await Promise.all([
         import('jszip').then(m => m.default),
         import('html-to-image'),
+        import('react-dom/client'),
       ])
 
-      const zip  = new JSZip()
+      const zip    = new JSZip()
       const folder = zip.folder(carouselTitle.replace(/[^a-zA-Z0-9]/g, '_'))!
 
-      const slideEls = document.querySelectorAll('[data-slide-id]')
+      // Offscreen mount point. Fixed at 1080px wide so each slide is
+      // captured at the canvas reference width regardless of viewport.
+      const offscreen = document.createElement('div')
+      offscreen.style.cssText = [
+        'position: fixed',
+        'left: -99999px',
+        'top: 0',
+        'width: 1080px',
+        'pointer-events: none',
+        'z-index: -1',
+      ].join('; ')
+      document.body.appendChild(offscreen)
 
-      // Pre-load fonts once based on the first slide's font usage —
-      // they're all rendered with the same template so a single warm-up
-      // is enough.
-      if (slideEls[0]) await ensureFontsLoaded(slideEls[0] as HTMLElement)
+      cleanup = () => {
+        if (offscreen.parentNode) offscreen.parentNode.removeChild(offscreen)
+      }
 
-      for (let i = 0; i < slideEls.length; i++) {
-        const el = slideEls[i] as HTMLElement
-        setProgress(Math.round(((i + 1) / slideEls.length) * 90))
+      // Warm up the fonts using the first slide's would-be rendered text.
+      // Renders once early so document.fonts.load resolves with the
+      // actual weights/families that will appear in the captures.
+      const fallbackStructure = parseStructure(templateStructure ?? null)
 
-        // Freeze cqw → px on auto-fit text (html-to-image also doesn't
-        // resolve container queries, same as html2canvas).
-        const autofitNodes = el.querySelectorAll<HTMLElement>('[data-autofit-text]')
+      for (let i = 0; i < slides.length; i++) {
+        const slide = slides[i]
+        setProgress(Math.round(((i + 1) / slides.length) * 90))
+
+        const structure: TemplateStructure | null =
+          parseStructure(slide.templateStructure ?? null) ?? fallbackStructure
+
+        // Mount this slide
+        const slideHost = document.createElement('div')
+        slideHost.dataset.slideId = slide.id
+        offscreen.appendChild(slideHost)
+        const root = ReactDOM.createRoot(slideHost)
+
+        await new Promise<void>((resolve) => {
+          root.render(
+            structure ? (
+              <TemplateRenderer
+                structure={structure}
+                content={{
+                  headline: slide.title,
+                  subtitle: slide.subtitle ?? slide.content,
+                  cta:      slide.cta,
+                  imageUrl: slide.imageUrl,
+                }}
+                showImageSlotHint={false}
+              />
+            ) : (
+              <LegacySlide slide={slide} />
+            )
+          )
+          // 1 frame to allow first paint + a small buffer for layout
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        })
+
+        // Wait for fonts the slide actually uses to be ready.
+        await ensureFontsLoaded(slideHost)
+        // Extra cushion for the auto-fit ResizeObserver passes.
+        await new Promise(r => setTimeout(r, 120))
+
+        // Freeze cqw → px on auto-fit text so html-to-image captures
+        // the correct size (it doesn't resolve container queries).
+        const autofitNodes = slideHost.querySelectorAll<HTMLElement>('[data-autofit-text]')
         const restore: { node: HTMLElement; original: string }[] = []
         autofitNodes.forEach(n => {
           restore.push({ node: n, original: n.style.fontSize })
@@ -81,7 +148,7 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
 
         let dataUrl: string
         try {
-          dataUrl = await htmlToImage.toPng(el, {
+          dataUrl = await htmlToImage.toPng(slideHost, {
             pixelRatio: 2,
             cacheBust:  true,
             filter: (node) => {
@@ -91,18 +158,17 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
           })
         } finally {
           restore.forEach(({ node, original }) => { node.style.fontSize = original })
+          root.unmount()
+          slideHost.remove()
         }
 
-        // Convert data URL → blob for JSZip.
         const blob = await (await fetch(dataUrl)).blob()
-
-        const slideTitle = slides[i]?.title?.replace(/[^a-zA-Z0-9]/g, '_') || `slide_${i + 1}`
+        const slideTitle = slide.title?.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40) || `slide_${i + 1}`
         folder.file(`${String(i + 1).padStart(2, '0')}_${slideTitle}.png`, blob)
       }
 
       setProgress(95)
 
-      // Log usage (fire-and-forget)
       fetch('/api/user/export-zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,6 +188,7 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
     } catch (e: any) {
       setError(e.message || 'Erro ao exportar slides')
     } finally {
+      cleanup?.()
       setLoading(false)
     }
   }
@@ -153,6 +220,32 @@ export default function ExportZipButton({ carouselId, carouselTitle, slides, can
           <AlertCircle size={11} /> {error}
         </p>
       )}
+    </div>
+  )
+}
+
+/** Tiny fallback for legacy carousels with no templateStructure. */
+function LegacySlide({ slide }: { slide: ExportSlide }) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        aspectRatio: '1 / 1',
+        background: slide.imageUrl
+          ? `linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0.7)), url(${slide.imageUrl}) center/cover`
+          : '#0f172a',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '8%',
+        fontFamily: 'Inter, system-ui, sans-serif',
+        textAlign: 'center',
+      }}
+    >
+      <h1 style={{ fontSize: '6cqw', fontWeight: 900, lineHeight: 1.1 }}>
+        {slide.title ?? '—'}
+      </h1>
     </div>
   )
 }

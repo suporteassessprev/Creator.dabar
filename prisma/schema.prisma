@@ -301,6 +301,13 @@ model Slide {
   accentColor     String   @default("#0ea5e9")
   fontFamily      String   @default("Inter")
   layout          String   @default("headline-banner")
+  /**
+   * Optional per-slide template override. When set, this slide renders
+   * using THIS TemplateStructure instead of the carousel's. Used by the
+   * "Trocar template — só esse slide" flow in the editor — perfect for
+   * "Criativos em Massa" where each slide is an independent ad.
+   */
+  templateStructure String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

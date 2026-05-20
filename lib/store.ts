@@ -38,6 +38,12 @@ export interface Slide {
   accentColor: string
   fontFamily: string
   layout: SlideLayout
+  /**
+   * Optional per-slide template override. When set, this slide renders
+   * with this structure instead of the carousel-level one. Powers the
+   * "Trocar template → só esse slide" flow.
+   */
+  templateStructure?: string | null
 }
 
 export interface Carousel {
