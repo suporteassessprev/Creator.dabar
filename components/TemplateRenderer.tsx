@@ -492,28 +492,38 @@ function useStickyTextLayout(
     const container = containerRef.current
     if (!container || !enabled) return
 
+    let disposed = false
+
     const textTypes = new Set(['text_headline', 'text_subtitle', 'text_cta', 'badge'])
     const textEls = structure.elements
       .filter(e => textTypes.has(e.type) && e.visible !== false)
       .sort((a, b) => a.y - b.y) as TextElement[]
 
+    // If no element actually opts into sticking, skip the reflow loop
+    // entirely. Avoids unnecessary DOM walks + ResizeObserver churn
+    // for templates that don't use this feature.
+    const anyStick = textEls.some(el => el.stickToPrevious)
+    if (!anyStick) return
+
     function reflow() {
-      if (!container) return
-      const containerRect = container.getBoundingClientRect()
-      // First pass: clear transforms so measurements reflect the
-      // unshifted natural positions.
+      // Bail if the component unmounted between RAF callbacks.
+      if (disposed || !container.isConnected) return
+
+      // First pass: clear transforms so measurements reflect natural
+      // positions. Each node is checked for isConnected — React may
+      // have removed it during a re-render before this RAF fires.
       textEls.forEach(el => {
         const node = container.querySelector<HTMLElement>(`[data-element-id="${el.id}"]`)
-        if (node) node.style.transform = ''
+        if (node?.isConnected) node.style.transform = ''
       })
-      // Second pass: for each stick-to-previous, snap below the prior.
+      // Second pass: snap each "sticky" element below its predecessor.
       for (let i = 1; i < textEls.length; i++) {
         const el = textEls[i]
         if (!el.stickToPrevious) continue
         const prev = textEls[i - 1]
         const myNode   = container.querySelector<HTMLElement>(`[data-element-id="${el.id}"]`)
         const prevNode = container.querySelector<HTMLElement>(`[data-element-id="${prev.id}"]`)
-        if (!myNode || !prevNode) continue
+        if (!myNode?.isConnected || !prevNode?.isConnected) continue
         const prevRect = prevNode.getBoundingClientRect()
         const myRect   = myNode.getBoundingClientRect()
         const gapPx    = el.stickGap ?? 12
@@ -525,16 +535,27 @@ function useStickyTextLayout(
       }
     }
 
-    reflow()
-    // Re-run on container resize (handles font auto-fit reflows, image
-    // loading, etc).
-    const ro = new ResizeObserver(reflow)
+    // Run after a frame so React finished mounting the children we're
+    // about to query. Avoids "Node not a child" errors when the effect
+    // races React's commit phase.
+    const rafId = requestAnimationFrame(reflow)
+
+    const ro = new ResizeObserver(() => {
+      // Same: schedule for next frame so React reconciliation has
+      // settled before we measure & mutate.
+      if (!disposed) requestAnimationFrame(reflow)
+    })
     ro.observe(container)
     structure.elements.forEach(el => {
       const node = container.querySelector<HTMLElement>(`[data-element-id="${el.id}"]`)
-      if (node) ro.observe(node)
+      if (node?.isConnected) ro.observe(node)
     })
-    return () => ro.disconnect()
+
+    return () => {
+      disposed = true
+      cancelAnimationFrame(rafId)
+      ro.disconnect()
+    }
   }, [containerRef, structure, enabled])
 }
 
