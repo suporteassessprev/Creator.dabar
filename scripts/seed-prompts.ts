@@ -90,65 +90,89 @@ CTA (máx 4 palavras, imperativo):
 - NUNCA: "Saiba mais" — é o CTA mais batido que existe
 
 — ETAPA 4: IMAGE PROMPT (em inglês) — EVIDÊNCIA FÍSICA —
-REGRA DE OURO: prefira mostrar EVIDÊNCIA FÍSICA da história,
-NÃO pessoa contemplando documento. "Person staring at paper with
-sad face" é o cliché que mata o scroll. Use uma destas
-abordagens:
+REGRA DE OURO: a imagem mostra o TRAUMA / EVENTO REAL da história,
+não uma metáfora abstrata. Quando o tema tem trauma físico claro,
+ABSOLUTAMENTE PROIBIDO substituir por envelope, documento genérico,
+ou ferramenta isolada.
 
-a) PARTE DO CORPO + CONTEXTO (mais forte pra acidentes, saúde,
-   sequelas físicas):
+— MAPEAMENTO OBRIGATÓRIO TEMA → EVIDÊNCIA VISUAL —
+
+Se tema envolve ACIDENTE / SEQUELA / LESÃO / AUXÍLIO-ACIDENTE:
+  TEM que ter UMA destas (escolha):
+  - raio-x de osso fraturado / parafuso / placa metálica
+  - perna com pinos cirúrgicos, lençol de hospital
+  - muleta encostada, cadeira de rodas em corredor
+  - gesso/imobilizador no braço/perna
+  - cicatriz cirúrgica close-up
+  - fisioterapia em andamento
+  - capacete/botina rachada caída + ferramentas tombadas
+    (NÃO ferramenta isolada e limpa)
+  - ambulância com luzes ao fundo, EPI no chão
+  - mão calejada com bandagem fresca, sala de espera hospital
+  PROIBIDO pra esse tema: envelope lacrado, mãos pegando docs,
+  ferramenta isolada limpa, oficina mecânica bonita.
+
+Se tema envolve MATERNIDADE / GESTANTE / AUXÍLIO-MATERNIDADE:
+  - barriga gestante + carteira vazia / contas vencidas
+  - mãos sobre a barriga + ambiente humilde
+  - sapatinho de bebê em cima de boleto INSS
+  - berço vazio em quarto modesto
+  - mãe nova encarando ultrassom + folha de pagamento zerada
+
+Se tema envolve APOSENTADORIA / IDOSO / BPC / LOAS:
+  - mãos enrugadas contando moedas
+  - idoso na fila do INSS, exausto
+  - cartela de remédios + envelope INSS (esse contexto OK aqui,
+    NÃO pra acidente)
+  - cadeira vazia na sala de jantar
+
+Se tema envolve DESEMPREGO / DÍVIDAS:
+  - carteira aberta vazia, mesa com contas vencidas
+  - mochila com currículos espalhados, banco de praça
+  - celular com saldo negativo
+
+Se tema envolve TRABALHISTA / RESCISÃO:
+  - crachá / uniforme dobrado em cima de carta de demissão
+  - armário vazio, caixa de papelão
+  - ferramenta deixada no chão da fábrica vazia
+
+— ABORDAGENS VISUAIS (escolha 1, sempre PHOTOREALISTIC) —
+
+a) PARTE DO CORPO + CONTEXTO:
    "close-up of scarred leg with surgical screws and metal pins,
-   hospital sheet draping, dramatic side lighting, photographic
-   realism, no faces"
+   hospital sheet draping, dramatic side lighting, no face"
 
-   "extreme close-up of calloused construction worker hands
-   holding worn safety helmet, blurred ambulance lights in
-   background, cinematic"
-
-b) OBJETO COMO METÁFORA DA HISTÓRIA:
-   "empty baby crib in dimly lit nursery, single sunray crossing
-   the room, melancholic but hopeful, cinematic"
-
-   "stethoscope and INSS denial letter on hospital bedside table,
-   dramatic shallow depth of field"
-
-c) MOMENTO IMEDIATAMENTE APÓS o evento (sem mostrar violência):
-   "fallen construction helmet next to scattered tools on warehouse
-   floor, soft warning light, no people, documentary realism"
-
-   "wheelchair tire mark on hospital floor, fluorescent lighting,
-   long corridor, lonely composition"
-
-d) BEFORE/AFTER em frame único:
-   "split frame: left side worn-out work boots covered in mud /
-   right side same person walking with cane on rehab path, same
-   lighting"
-
-e) PESSOA + EVIDÊNCIA (não só pessoa):
+b) PESSOA + EVIDÊNCIA (não só pessoa contemplativa):
    "exhausted construction worker sitting on hospital bed holding
    X-ray showing screws in his leg, soft window light, raw
    documentary feel, no smiling"
 
-   "elderly woman's wrinkled hands clutching unpaid bills, blurred
-   medication boxes in background, golden hour through curtains"
+c) MOMENTO IMEDIATAMENTE APÓS evento:
+   "fallen construction helmet next to scattered tools on warehouse
+   floor, dim warning light, blurred ambulance reflection in glass,
+   no people"
 
-f) METÁFORA SURREAL com realismo (use com moderação):
-   "real Brazilian R$100 bills slowly floating away from extended
-   hand, photographic realism, deep shadow background"
+d) BEFORE/AFTER em frame único:
+   "split frame: left side leg with surgical scars and stitches /
+   right side same person walking with cane on physio path, same
+   lighting"
 
-PROIBIDO usar:
+e) METÁFORA SURREAL com realismo (use com moderação, só quando
+   o tema é financeiro/benefício sem evento traumático claro):
+   "real Brazilian R$100 bills floating away from extended hand,
+   photographic realism, deep shadow background"
+
+PROIBIDO em QUALQUER caso:
 - "Person staring at document sadly" (cliché morto)
 - "Smiling person looking at camera"
-- "Person holding paper with worried expression" (mesma coisa
-  com sinônimos)
-- "Pregnant woman looking happy/sad" (stock photo)
-- Qualquer prompt que sugira "person holding [thing] with
-  [emotion] expression" como conceito CENTRAL
+- "Person holding paper with worried expression"
+- "Wax-sealed envelope on wooden desk" (vago, não evoca tema)
+- "Hands grabbing books/papers on table" (genérico)
+- "Mechanic hand holding clean wrench" pra tema de acidente
+  (mostra trabalho, não a sequela — não conta a história)
 
 Sempre INGLÊS. Sempre photorealistic. Sempre cinematic lighting.
-Sempre 4k. NUNCA texto/letras dentro da imagem. Quando incluir
-pessoa, NÃO deixar ela ser o conceito visual sozinho — sempre
-junto com OBJETO ou EVIDÊNCIA específica.
+Sempre 4k. NUNCA texto/letras dentro da imagem.
 
 — REGRA OBRIGATÓRIA —
 A imagem PRECISA ter um elemento concreto/físico que reforce a
@@ -262,33 +286,81 @@ cta (BOTÃO, máx 4 palavras, imperativo) — OBRIGATÓRIO:
 - TODOS os slides PRECISAM ter cta — não pode vir vazio
 
 imagePrompt (em INGLÊS, photorealistic):
-A imagem TEM QUE contar a história da copy daquele criativo
-específico. Use UMA destas abordagens, preferindo PARTES DO CORPO
-ou OBJETOS antes de pessoas inteiras:
+A imagem TEM QUE contar a história REAL da copy. Não use
+metáforas abstratas (envelopes, documentos genéricos, mãos
+pegando objetos) quando o tema tem TRAUMA FÍSICO ou EVENTO
+CONCRETO. Mostra o trauma.
+
+— MAPEAMENTO OBRIGATÓRIO TEMA → EVIDÊNCIA VISUAL —
+
+Se tema envolve ACIDENTE / SEQUELA / LESÃO / AUXÍLIO-ACIDENTE:
+  TEM que ter UMA destas (escolha):
+  - raio-x de osso fraturado / parafuso / placa metálica
+  - perna com pinos cirúrgicos visíveis, lençol de hospital
+  - muleta encostada na parede, cadeira de rodas em corredor
+  - gesso/imobilizador no braço/perna
+  - cicatriz cirúrgica em close-up
+  - cena de fisioterapia em andamento
+  - capacete/botina rachada caída no chão de obra (não isolada!
+    junto de ferramentas tombadas, sangue seco ou poeira)
+  - ambulância com luzes ao fundo, EPI no chão
+  - mão calejada com bandagem fresca, sala de espera
+  PROIBIDO pra acidente: envelope lacrado, mãos pegando docs,
+  ferramenta isolada e limpa, cena bonita de oficina mecânica.
+
+Se tema envolve MATERNIDADE / GESTANTE / AUXÍLIO-MATERNIDADE:
+  - barriga gestante + carteira vazia / contas vencidas
+  - mãos sobre a barriga + ambiente humilde
+  - sapatinho de bebê em cima de boleto INSS
+  - berço vazio em quarto modesto
+  - mãe nova encarando ultrassom e folha de pagamento zerada
+
+Se tema envolve APOSENTADORIA / IDOSO / BPC / LOAS:
+  - mãos enrugadas contando moedas
+  - idoso em fila do INSS, cansado
+  - cartela de remédios + envelope INSS ao lado (esse contexto
+    OK pra idoso, NÃO pra acidente)
+  - cadeira vazia na sala de jantar
+
+Se tema envolve DESEMPREGO / DÍVIDAS:
+  - carteira aberta vazia, mesa com contas vencidas
+  - mochila com currículos espalhados no banco da praça
+  - tela do celular com saldo negativo
+
+Se tema envolve TRABALHISTA / RESCISÃO:
+  - crachá / uniforme dobrado em cima de carta de demissão
+  - armário vazio do funcionário, caixa de papelão
+  - ferramenta de trabalho deixada no chão da fábrica vazia
+
+— ABORDAGENS VISUAIS VÁLIDAS (escolha 1) —
 
 a) PARTE DO CORPO + CONTEXTO: "close-up of scarred leg with
    surgical screws, hospital sheet, dramatic side lighting"
 
-b) OBJETO COMO METÁFORA: "empty baby crib in dimly lit nursery,
-   single sunray crossing the room, cinematic"
+b) PESSOA COM EVIDÊNCIA: "exhausted worker holding X-ray of
+   his fractured knee, hospital chair, raw documentary feel"
 
-c) MOMENTO IMEDIATAMENTE APÓS evento (sem violência):
-   "fallen construction helmet next to scattered tools, soft
-   warning light, no people"
+c) MOMENTO IMEDIATAMENTE APÓS evento: "fallen construction
+   helmet next to overturned toolbox on warehouse floor,
+   blurred ambulance lights in background, no people"
 
-d) BEFORE/AFTER em frame único: "split frame: left side worn-out
-   work boots in mud / right side same person walking on rehab
-   path"
+d) BEFORE/AFTER em frame único: "split frame: left side leg
+   with surgical scars and stitches / right side same person
+   walking with cane in physiotherapy"
 
-e) PESSOA + EVIDÊNCIA (não só pessoa): "exhausted worker holding
-   X-ray showing screws in leg, raw documentary feel"
+e) METÁFORA SURREAL com realismo (último recurso): "Brazilian
+   R$100 bills floating away from extended hand, photographic
+   realism"
 
-f) METÁFORA SURREAL com realismo: "Brazilian R$100 bills floating
-   away from extended hand, photographic realism"
-
-PROIBIDO: "Person staring at document sadly", "Smiling person
-looking at camera", "Person holding paper with worried expression"
-— tudo isso é stock photo que mata o scroll.
+PROIBIDO em QUALQUER caso:
+- "Person staring at document sadly"
+- "Smiling person looking at camera"
+- "Person holding paper with worried expression"
+- "Wax-sealed envelope on wooden desk" (genérico demais)
+- "Hands grabbing books/papers on table" (vago)
+- Ferramenta isolada e limpa sem contexto de evento
+- "Mechanic hand holding wrench" pra tema de acidente (mostra
+  trabalho, não a sequela)
 
 Sempre INGLÊS. Sempre photorealistic. Sempre cinematic lighting.
 NUNCA texto na imagem.
