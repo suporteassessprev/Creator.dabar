@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
             accentColor:     s.accentColor     ?? '#0ea5e9',
             fontFamily:      s.fontFamily      ?? 'Inter',
             layout:          s.layout          ?? 'headline-banner',
+            templateStructure: s.templateStructure ?? null,
           })),
         })
       })

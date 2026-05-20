@@ -72,13 +72,33 @@ function EditorContent() {
       .catch(() => {})
   }, [templatePickerOpen, availableTemplates.length])
 
-  function applyTemplate(tpl: any) {
+  /**
+   * Two scopes for template swap:
+   *  - 'all'   → replaces the carousel's templateStructure (every slide
+   *    without a per-slide override gets the new template).
+   *  - 'slide' → sets templateStructure on the ACTIVE slide only.
+   *    Designed for "Criativos em Massa" where each slide is its own
+   *    independent ad with its own design.
+   */
+  function applyTemplate(tpl: any, scope: 'all' | 'slide' = 'all') {
     if (!carousel) return
-    setCarousel({
-      ...carousel,
-      templateStructure: tpl.structure ?? null,
-      templateId: tpl.id,
-    })
+    if (scope === 'slide') {
+      const newSlides = carousel.slides.map((s, i) =>
+        i === activeSlideIndex
+          ? { ...s, templateStructure: tpl.structure ?? null }
+          : s
+      )
+      setCarousel({ ...carousel, slides: newSlides })
+    } else {
+      // Carousel-level swap. Clear per-slide overrides too, otherwise
+      // they would shadow the new carousel-level template.
+      setCarousel({
+        ...carousel,
+        templateStructure: tpl.structure ?? null,
+        templateId:        tpl.id,
+        slides:            carousel.slides.map(s => ({ ...s, templateStructure: null })),
+      })
+    }
     setTemplatePickerOpen(false)
   }
 
@@ -249,34 +269,61 @@ function EditorContent() {
       <div className="flex h-screen overflow-hidden">
         {/* Slide strip (left) */}
         <div className="w-24 shrink-0 border-r border-white/5 flex flex-col overflow-y-auto py-4 px-2 gap-2 bg-black/20">
-          {carousel.slides.map((slide, i) => (
-            <div key={slide.id} className="relative">
-              <div
-                onClick={() => setActiveSlideIndex(i)}
-                className={`w-full cursor-pointer rounded-lg overflow-hidden transition-all ${
-                  i === activeSlideIndex ? 'ring-2 ring-blue-500' : 'opacity-60 hover:opacity-100'
-                }`}
-              >
-                {parsedTpl ? (
-                  <div className="pointer-events-none">
-                    <TemplateRenderer
-                      structure={parsedTpl}
-                      content={{
-                        headline: slide.title,
-                        subtitle: slide.subtitle ?? slide.content,
-                        cta:      slide.cta,
-                        imageUrl: slide.imageUrl,
-                      }}
-                      showImageSlotHint={false}
-                    />
-                  </div>
-                ) : (
-                  <SlidePreview slide={slide} index={i} size="sm" format={carousel.format} />
+          {carousel.slides.map((slide, i) => {
+            // Use the slide's own template if it has an override —
+            // otherwise the carousel-level one.
+            const slideTpl =
+              parseStructure(slide.templateStructure ?? null) ?? parsedTpl
+            return (
+              <div key={slide.id} className="relative group">
+                <div
+                  onClick={() => setActiveSlideIndex(i)}
+                  className={`w-full cursor-pointer rounded-lg overflow-hidden transition-all ${
+                    i === activeSlideIndex ? 'ring-2 ring-blue-500' : 'opacity-60 hover:opacity-100'
+                  }`}
+                >
+                  {slideTpl ? (
+                    <div className="pointer-events-none">
+                      <TemplateRenderer
+                        structure={slideTpl}
+                        content={{
+                          headline: slide.title,
+                          subtitle: slide.subtitle ?? slide.content,
+                          cta:      slide.cta,
+                          imageUrl: slide.imageUrl,
+                        }}
+                        showImageSlotHint={false}
+                      />
+                    </div>
+                  ) : (
+                    <SlidePreview slide={slide} index={i} size="sm" format={carousel.format} />
+                  )}
+                </div>
+                {/* Delete slide — appears on hover, disabled when 1 slide left */}
+                {carousel.slides.length > 1 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (!confirm(`Excluir o slide ${i + 1}? Não dá pra desfazer.`)) return
+                      const nextSlides = carousel.slides.filter((_, idx) => idx !== i)
+                      setCarousel({ ...carousel, slides: nextSlides })
+                      // If we just deleted the active one, fall back to the
+                      // previous index (or 0).
+                      if (i <= activeSlideIndex) {
+                        setActiveSlideIndex(Math.max(0, Math.min(activeSlideIndex, nextSlides.length - 1)))
+                      }
+                    }}
+                    className="absolute top-1 right-1 bg-red-500/90 hover:bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Excluir este slide"
+                    type="button"
+                  >
+                    <Trash2 size={10} />
+                  </button>
                 )}
+                <div className="text-center text-xs text-gray-600 mt-1">{i + 1}</div>
               </div>
-              <div className="text-center text-xs text-gray-600 mt-1">{i + 1}</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* Main canvas */}
@@ -310,6 +357,7 @@ function EditorContent() {
                   carouselId={carousel.id}
                   carouselTitle={carousel.title}
                   slides={carousel.slides}
+                  templateStructure={carousel.templateStructure ?? null}
                   canExport={canExportZip}
                 />
               )}
@@ -358,7 +406,12 @@ function EditorContent() {
                   Legacy carousels (no structure) use SlidePreview. */}
               <div ref={slideRef}>
                 {activeSlide && (() => {
-                  const tpl = parseStructure(carousel.templateStructure ?? null)
+                  // Per-slide override wins over the carousel-level template
+                  // (used by "Trocar template → só esse slide").
+                  const tpl = parseStructure(
+                    activeSlide.templateStructure ?? carousel.templateStructure ?? null
+                  )
+                  const editingPerSlide = !!activeSlide.templateStructure
                   if (tpl) {
                     return (
                       <EditableTemplateCanvas
@@ -372,10 +425,19 @@ function EditorContent() {
                         selectedId={selectedElementId}
                         onSelectionChange={setSelectedElementId}
                         onStructureChange={(next: TemplateStructure) => {
-                          setCarousel({
-                            ...carousel,
-                            templateStructure: serializeStructure(next),
-                          })
+                          // If this slide had a per-slide override, edits
+                          // stay on the slide. Otherwise edits modify the
+                          // carousel-level template (and bleed to siblings).
+                          if (editingPerSlide) {
+                            updateSlide({
+                              templateStructure: serializeStructure(next),
+                            })
+                          } else {
+                            setCarousel({
+                              ...carousel,
+                              templateStructure: serializeStructure(next),
+                            })
+                          }
                         }}
                       />
                     )
@@ -763,8 +825,9 @@ function EditorContent() {
       {templatePickerOpen && (
         <SwapTemplateModal
           templates={availableTemplates}
-          mode={carousel.mode}
+          carouselHasMultipleSlides={carousel.slides.length > 1}
           currentTemplateId={carousel.templateId ?? null}
+          activeSlideNumber={activeSlideIndex + 1}
           onSelect={applyTemplate}
           onClose={() => setTemplatePickerOpen(false)}
         />
@@ -775,19 +838,18 @@ function EditorContent() {
 
 /* ─── Swap template modal ──────────────────────────────────────────── */
 function SwapTemplateModal({
-  templates, mode, currentTemplateId, onSelect, onClose,
+  templates, carouselHasMultipleSlides, currentTemplateId, activeSlideNumber, onSelect, onClose,
 }: {
   templates: any[]
-  mode: string
+  carouselHasMultipleSlides: boolean
   currentTemplateId: string | null
-  onSelect: (tpl: any) => void
+  activeSlideNumber: number
+  onSelect: (tpl: any, scope: 'all' | 'slide') => void
   onClose: () => void
 }) {
-  // eligible by mode
-  const eligible = templates.filter(t =>
-    mode === 'creative' ? (t.mode === 'creative' || t.mode === 'both')
-                        : (t.mode === 'carousel' || t.mode === 'both')
-  )
+  // No mode filter — both "Criativo Único" and "Criativos em Massa" share
+  // the same pool of templates (each slide is an independent ad).
+  const eligible = templates
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
@@ -807,6 +869,9 @@ function SwapTemplateModal({
         </div>
         <p className="text-xs text-gray-400 mb-4">
           O texto e a imagem geradas serão mantidos — só o layout visual muda.
+          {carouselHasMultipleSlides && (
+            <> Escolha o template e depois decida se aplica em <strong>todos os slides</strong> ou <strong>só no slide {activeSlideNumber}</strong>.</>
+          )}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {eligible.map(t => {
@@ -817,7 +882,22 @@ function SwapTemplateModal({
             return (
               <button
                 key={t.id}
-                onClick={() => onSelect(t)}
+                onClick={() => {
+                  // Single-slide carousels: skip the prompt, always apply
+                  // carousel-level (there's no other slide to differentiate).
+                  if (!carouselHasMultipleSlides) {
+                    onSelect(t, 'all')
+                    return
+                  }
+                  // For multi-slide: confirm scope. Default to "só esse slide"
+                  // since that's the workflow user wants for Criativos em Massa.
+                  const onlyThis = confirm(
+                    `Aplicar este template SÓ no slide ${activeSlideNumber}?\n\n` +
+                    `OK = só neste slide\n` +
+                    `Cancelar = aplicar em TODOS os slides`
+                  )
+                  onSelect(t, onlyThis ? 'slide' : 'all')
+                }}
                 className={`rounded-xl overflow-hidden border transition-all text-left ${
                   isCurrent ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-white/10 hover:border-white/30'
                 }`}

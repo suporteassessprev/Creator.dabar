@@ -123,8 +123,14 @@ export default function CarouselCard({ carousel, onDelete }: CarouselCardProps) 
   )
 }
 
-/** Fallback for carousels generated before the visual template system. */
-function LegacyPreview({ slide }: { slide?: { title?: string; backgroundColor?: string; textColor?: string; imageUrl?: string } }) {
+/**
+ * Lightweight fallback for carousels with no templateStructure (legacy
+ * format, mostly). Avoids loading the heavy base64 imageUrl as a giant
+ * background — that was both slow to paint and visually noisy in the
+ * grid. Shows a colorful gradient backdrop derived from the slide's
+ * accentColor + the title, large and readable.
+ */
+function LegacyPreview({ slide }: { slide?: { title?: string; backgroundColor?: string; textColor?: string; accentColor?: string } }) {
   if (!slide) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center text-gray-600">
@@ -133,18 +139,21 @@ function LegacyPreview({ slide }: { slide?: { title?: string; backgroundColor?: 
       </div>
     )
   }
+  const bg     = slide.backgroundColor ?? '#0f172a'
+  const accent = slide.accentColor     ?? '#0ea5e9'
   return (
     <div
-      className="w-full h-full flex items-center justify-center p-6"
+      className="w-full h-full flex items-center justify-center p-6 relative overflow-hidden"
       style={{
-        backgroundColor: slide.backgroundColor ?? '#0f172a',
-        backgroundImage: slide.imageUrl ? `url(${slide.imageUrl})` : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
+        background: `linear-gradient(135deg, ${bg} 0%, ${bg} 60%, ${accent}44 100%)`,
       }}
     >
+      <div
+        className="absolute -bottom-12 -right-12 w-40 h-40 rounded-full blur-3xl opacity-50"
+        style={{ background: accent }}
+      />
       <p
-        className="text-base font-bold text-center leading-tight"
+        className="relative text-xl font-black text-center leading-tight z-10"
         style={{ color: slide.textColor ?? '#ffffff' }}
       >
         {(slide.title ?? 'Carrossel').slice(0, 60)}
