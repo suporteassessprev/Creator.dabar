@@ -102,10 +102,19 @@ function EditorContent() {
     setTemplatePickerOpen(false)
   }
 
+  // Snapshot of the carousel as the AI generated it. Captured once on
+  // mount (or when the carousel id changes) and used at save time to
+  // compute the diff between AI output and final user edits — feeds
+  // /api/learning/edit for the personalization sprint.
+  const originalSlidesRef = useRef<Slide[]>([])
+
   useEffect(() => {
     if (carouselId) {
       const c = getCarousel(carouselId)
       setCarousel(c)
+      if (c?.slides) {
+        originalSlidesRef.current = c.slides.map(s => ({ ...s }))
+      }
     }
   }, [carouselId, getCarousel])
 
@@ -171,6 +180,56 @@ function EditorContent() {
         templateStructure: carousel.templateStructure ?? null,
       }),
     }).catch(() => {})
+
+    // Learning capture (fire-and-forget). Per slide, compare the
+    // saved final state vs the AI's original snapshot. The endpoint
+    // filters out trivial typo-level edits server-side.
+    const originals = originalSlidesRef.current
+    carousel.slides.forEach((slide, i) => {
+      const ai = originals[i]
+      if (!ai) return
+      fetch('/api/learning/edit', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carouselId: carousel.id,
+          slideId:    slide.id,
+          mode:       carousel.mode,
+          topic:      carousel.topic,
+          ai: {
+            headline:    ai.title,
+            subtitle:    ai.subtitle ?? ai.content,
+            cta:         ai.cta,
+            imagePrompt: ai.imagePrompt,
+          },
+          user: {
+            headline:    slide.title,
+            subtitle:    slide.subtitle ?? slide.content,
+            cta:         slide.cta,
+            imagePrompt: slide.imagePrompt,
+          },
+        }),
+      }).catch(() => {})
+
+      // Mark image approval status on save. Approved = there's an image
+      // and the user kept it (didn't delete it during the session).
+      if (slide.imagePrompt) {
+        fetch('/api/learning/image', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slideId:    slide.id,
+            promptText: slide.imagePrompt,
+            approved:   !!slide.imageUrl,
+            // regenCount inferred from history length (history[0] is the
+            // latest; each push = one regen). Minus 1 to exclude the
+            // initial generation itself.
+            regenCount: Math.max(0, (slide.imageHistory?.length ?? 1) - 1),
+          }),
+        }).catch(() => {})
+      }
+    })
+
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
