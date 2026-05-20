@@ -32,6 +32,8 @@ model User {
   apiKeys             ApiKey[]
   emailTokens         EmailToken[]
   templateSubmissions TemplateSubmission[]
+  creativeEdits       CreativeEdit[]
+  imageGenerations    ImageGeneration[]
 
   @@index([email])
   @@index([stripeCustomerId])
@@ -272,6 +274,66 @@ model Carousel {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+// ─── Learning Loop: capture diffs between AI output and user edits ──────
+//
+// Sprint 1 of the "RLHF light" feature. We DON'T train a model — we
+// accumulate examples of how each user transforms AI output into what
+// they actually publish. Later sprints feed these examples back into
+// the prompt as few-shot demonstrations.
+//
+// Zero behavior change while this just collects. Sprint 2 reads from
+// CreativeEdit to personalize prompts; Sprint 3 reads ImageGeneration
+// to tune image prompts; Sprint 4 surfaces both in the admin dashboard.
+
+model CreativeEdit {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  carouselId      String?
+  slideId         String?
+  mode            String   // 'creative' or 'carousel'
+  topic           String
+  niche           String?  // optional manual tag; auto-detected later
+  // Snapshot of what the AI generated initially
+  aiHeadline      String?
+  aiSubtitle      String?  @db.Text
+  aiCta           String?
+  aiImagePrompt   String?  @db.Text
+  // Snapshot of what the user actually saved
+  userHeadline    String?
+  userSubtitle    String?  @db.Text
+  userCta         String?
+  userImagePrompt String?  @db.Text
+  // Diff metrics (0..1, char-level Levenshtein / max length).
+  // Used later to filter trivial typo edits from significant rewrites.
+  headlineDiffPct Float?
+  subtitleDiffPct Float?
+  ctaDiffPct      Float?
+  createdAt       DateTime @default(now())
+
+  @@index([userId, mode, createdAt])
+  @@index([niche, mode])
+}
+
+// Per-image-prompt tracking. The user's regeneration behavior tells
+// us which prompts work first-shot (good) vs which need 3+ tries (bad).
+// Sprint 3 uses this to mine common modifiers from approved prompts;
+// admin sees a quality leaderboard in Sprint 4.
+model ImageGeneration {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slideId      String?
+  promptText   String   @db.Text
+  approved     Boolean? // true when the user kept this image on save
+  niche        String?
+  regenCount   Int      @default(0) // times the user clicked "regenerate" on this slot
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([niche, approved])
 }
 
 // ─── Stripe Webhook Idempotency ───────────────────────────────────────────
