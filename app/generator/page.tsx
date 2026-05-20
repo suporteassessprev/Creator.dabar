@@ -148,23 +148,37 @@ export default function ChatGeneratorPage() {
     }
   }
 
+  function templatePool(): PublishedTemplate[] {
+    if (templates.length === 0) return []
+    const withStructure = templates.filter(t => !!t.structure)
+    return withStructure.length > 0 ? withStructure : templates
+  }
+
   function pickTemplate(): PublishedTemplate | null {
     if (templateMode === 'manual') return selectedTemplate
-    // "Criativos em Massa" (interno: mode='carousel') agora produz N
-    // criativos independentes, cada um reusando um template de criativo.
-    // Por isso ambos os modos compartilham o mesmo pool de templates:
-    // qualquer template publicado serve.
-    const eligible = templates
-    if (eligible.length === 0) return null
-
-    // STRONG preference for templates WITH structure (the new visual
-    // ones). Legacy templates (structure=NULL) put the AI image at the
-    // bottom via SlidePreview, which is ugly. Templates with structure
-    // place the image inside the image_slot defined by the admin.
-    const withStructure = eligible.filter(t => !!t.structure)
-    const pool = withStructure.length > 0 ? withStructure : eligible
-
+    const pool = templatePool()
+    if (pool.length === 0) return null
     return pool[Math.floor(Math.random() * pool.length)]
+  }
+
+  /**
+   * Picks N distinct (when possible) templates — one per slide in
+   * "Criativos em Massa". Each creative ends up with its own visual
+   * design, matching the user's expectation of variety in mass drop.
+   * Manual mode returns N copies of the chosen template (user explicitly
+   * picked it).
+   */
+  function pickTemplatesForBatch(n: number): (PublishedTemplate | null)[] {
+    if (templateMode === 'manual') {
+      return Array.from({ length: n }, () => selectedTemplate)
+    }
+    const pool = templatePool()
+    if (pool.length === 0) return Array.from({ length: n }, () => null)
+    // Shuffle a copy of the pool, take N. If N > pool size, cycle.
+    const shuffled = [...pool].sort(() => Math.random() - 0.5)
+    const out: PublishedTemplate[] = []
+    for (let i = 0; i < n; i++) out.push(shuffled[i % shuffled.length])
+    return out
   }
 
   const updateStep = useCallback((id: string, status: GenerationStep['status'], newLabel?: string) => {
@@ -283,36 +297,57 @@ export default function ChatGeneratorPage() {
       } else {
         carousel.title = copyData.title || it.tema
         carousel.slides = buildSlides(copyData.slides, style)
+
+        // Criativos em Massa: cada slide ganha um template diferente
+        // do pool, pra dar variedade visual de fato. O carousel-level
+        // template fica como fallback (será sobrescrito por cada
+        // slide.templateStructure).
+        const perSlideTemplates = pickTemplatesForBatch(carousel.slides.length)
+        carousel.slides = carousel.slides.map((s, i) => {
+          const tpl = perSlideTemplates[i]
+          return {
+            ...s,
+            templateStructure: tpl?.structure ?? null,
+          }
+        })
       }
 
-      // Step 4+: generate image per slide
-      for (let i = 0; i < carousel.slides.length; i++) {
-        const slide = carousel.slides[i]
-        const stepId = `img-${i + 1}`
-        updateStep(stepId, 'running')
-        if (slide.imagePrompt) {
-          try {
-            const imgRes = await fetch('/api/generate-image', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt: slide.imagePrompt, mode }),
-            })
-            if (imgRes.ok) {
-              const { imageData } = await imgRes.json()
-              if (imageData) {
-                carousel.slides[i] = {
-                  ...slide,
-                  imageUrl: imageData,
-                  imageHistory: [imageData],
-                }
-              }
-            }
-          } catch {
-            // continue with other slides
+      // Step 4+: generate images for ALL slides IN PARALLEL.
+      // Antes era sequencial — N=7 slides = ~35s na pior das hipóteses,
+      // o que estourava timeouts e fazia user retry manual. Em paralelo
+      // resolve em ~5-8s. Promise.allSettled garante que uma falha não
+      // mata o lote.
+      carousel.slides.forEach((_, i) => updateStep(`img-${i + 1}`, 'running'))
+
+      const imageResults = await Promise.allSettled(
+        carousel.slides.map(async (slide, i) => {
+          if (!slide.imagePrompt) return { i, imageData: null as string | null }
+          const imgRes = await fetch('/api/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: slide.imagePrompt, mode }),
+          })
+          if (!imgRes.ok) {
+            const err = await imgRes.json().catch(() => ({}))
+            throw new Error(err.error || `HTTP ${imgRes.status}`)
           }
+          const { imageData } = await imgRes.json()
+          return { i, imageData: imageData as string | null }
+        })
+      )
+
+      imageResults.forEach((r, i) => {
+        if (r.status === 'fulfilled' && r.value.imageData) {
+          carousel.slides[i] = {
+            ...carousel.slides[i],
+            imageUrl:     r.value.imageData,
+            imageHistory: [r.value.imageData],
+          }
+        } else if (r.status === 'rejected') {
+          console.warn(`[generator] image ${i + 1} failed:`, r.reason?.message ?? r.reason)
         }
-        updateStep(stepId, 'done')
-      }
+        updateStep(`img-${i + 1}`, 'done')
+      })
 
       // Final
       updateStep('final', 'running')
