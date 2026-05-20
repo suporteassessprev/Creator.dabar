@@ -870,7 +870,7 @@ function SwapTemplateModal({
         <p className="text-xs text-gray-400 mb-4">
           O texto e a imagem geradas serão mantidos — só o layout visual muda.
           {carouselHasMultipleSlides && (
-            <> Escolha o template e depois decida se aplica em <strong>todos os slides</strong> ou <strong>só no slide {activeSlideNumber}</strong>.</>
+            <> Vai aplicar <strong>só no slide {activeSlideNumber}</strong>.</>
           )}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -883,20 +883,11 @@ function SwapTemplateModal({
               <button
                 key={t.id}
                 onClick={() => {
-                  // Single-slide carousels: skip the prompt, always apply
-                  // carousel-level (there's no other slide to differentiate).
-                  if (!carouselHasMultipleSlides) {
-                    onSelect(t, 'all')
-                    return
-                  }
-                  // For multi-slide: confirm scope. Default to "só esse slide"
-                  // since that's the workflow user wants for Criativos em Massa.
-                  const onlyThis = confirm(
-                    `Aplicar este template SÓ no slide ${activeSlideNumber}?\n\n` +
-                    `OK = só neste slide\n` +
-                    `Cancelar = aplicar em TODOS os slides`
-                  )
-                  onSelect(t, onlyThis ? 'slide' : 'all')
+                  // Multi-slide: aplica só no slide ativo (workflow ideal
+                  // pra "Criativos em Massa" — cada slide é um anúncio
+                  // independente). Botão "Aplicar a todos" abaixo se
+                  // quiser sobrescrever todos.
+                  onSelect(t, carouselHasMultipleSlides ? 'slide' : 'all')
                 }}
                 className={`rounded-xl overflow-hidden border transition-all text-left ${
                   isCurrent ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-white/10 hover:border-white/30'
