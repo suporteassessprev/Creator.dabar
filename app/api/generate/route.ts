@@ -54,9 +54,13 @@ function validateCarousel(p: any): void {
       'IA retornou resposta sem o array "slides". Verifique seu prompt em /admin/prompts → carousel_copy — ele precisa pedir um JSON com "title" e "slides" (array de {title, content, imagePrompt}).'
     )
   }
-  const emptySlide = p.slides.find((s: any) => !nonEmpty(s?.title) || !nonEmpty(s?.content))
+  const emptySlide = p.slides.find((s: any) =>
+    !nonEmpty(s?.title) || !nonEmpty(s?.content) || !nonEmpty(s?.cta)
+  )
   if (emptySlide) {
-    throw new Error('Pelo menos um slide veio sem title ou content. Verifique seu prompt — cada slide precisa ter "title" e "content" não-vazios.')
+    throw new Error(
+      'Pelo menos um slide veio sem title, content ou CTA. Como cada criativo é independente em "Criativos em Massa", todos precisam ter cta. Verifique seu prompt carousel_copy.'
+    )
   }
 }
 
