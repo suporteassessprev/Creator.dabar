@@ -460,8 +460,15 @@ function EditorContent() {
         {/* Right panel: editor */}
         <div className="w-72 shrink-0 border-l border-white/5 flex flex-col glass-dark overflow-hidden">
           {/* Element editor (when template structure exists) */}
-          {carousel.templateStructure && (() => {
-            const tpl = parseStructure(carousel.templateStructure)
+          {(activeSlide?.templateStructure || carousel.templateStructure) && (() => {
+            // Same priority as the main canvas: per-slide override beats
+            // carousel-level. Otherwise the sidebar would search the wrong
+            // structure for the selected element id (and never find it),
+            // leaving the user stuck on "Selecione um elemento".
+            const editingPerSlide = !!activeSlide?.templateStructure
+            const tpl = parseStructure(
+              activeSlide?.templateStructure ?? carousel.templateStructure ?? null
+            )
             const selectedEl: TemplateElement | null = tpl && selectedElementId
               ? (tpl.elements.find(e => e.id === selectedElementId) ?? null)
               : null
@@ -477,10 +484,15 @@ function EditorContent() {
                         x.id === selectedEl.id ? ({ ...x, ...patch } as TemplateElement) : x
                       ),
                     }
-                    setCarousel({
-                      ...carousel,
-                      templateStructure: serializeStructure(next),
-                    })
+                    // Persist back to whichever scope owns this structure.
+                    if (editingPerSlide) {
+                      updateSlide({ templateStructure: serializeStructure(next) })
+                    } else {
+                      setCarousel({
+                        ...carousel,
+                        templateStructure: serializeStructure(next),
+                      })
+                    }
                   }}
                   onDeselect={() => setSelectedElementId(null)}
                 />
