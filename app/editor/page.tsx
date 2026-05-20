@@ -145,11 +145,17 @@ function EditorContent() {
       templateStructure: carousel.templateStructure ?? null,
       templateId:        carousel.templateId ?? null,
     })
-    // Persist the FULL state to DB — title, slides (with imageUrl
-    // + imageHistory), style, format, mode, templateId,
-    // templateStructure. Previously these last two (template-related)
-    // were silently dropped, so coming back to the editor reset every
-    // layout edit. PUT handler accepts them now.
+    // Strip base64 imageUrl/imageHistory before sending — N slides ×
+    // ~1-2MB cada estoura o limite de 4.5MB de payload da Vercel
+    // (HTTP 413). As imagens ficam só na sessão atual; pra
+    // persistir definitivo, exportar via "Exportar Slide" / ZIP.
+    // TODO: upload de imagens pra storage externa (R2/Cloudinary)
+    // pra persistir entre sessões.
+    const slidesForSave = carousel.slides.map(s => ({
+      ...s,
+      imageUrl:     undefined,
+      imageHistory: undefined,
+    }))
     fetch(`/api/carousels/${carousel.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -158,7 +164,7 @@ function EditorContent() {
         topic:             carousel.topic,
         mode:              carousel.mode,
         format:            carousel.format,
-        slides:            carousel.slides,
+        slides:            slidesForSave,
         style:             JSON.stringify(carousel.style),
         status:            'ready',
         templateId:        carousel.templateId ?? null,
@@ -373,6 +379,19 @@ function EditorContent() {
               </button>
             </div>
           </div>
+
+          {/* Heads-up banner: images are session-only until we have
+              external storage. Exporting (PNG / ZIP) is the only way
+              to keep them. */}
+          {carousel.slides.some(s => s.imageUrl) && (
+            <div className="bg-amber-500/10 border-b border-amber-500/30 px-6 py-2 text-xs text-amber-200 flex items-center gap-2">
+              <span className="font-bold">⚠</span>
+              <span>
+                As imagens geradas vivem só nesta sessão. Antes de fechar,
+                use <strong>Exportar Slide</strong> ou <strong>Exportar ZIP</strong> pra salvar os PNGs no seu computador.
+              </span>
+            </div>
+          )}
 
           {/* Slide preview area */}
           <div className="flex-1 flex items-center justify-center p-8 overflow-auto">

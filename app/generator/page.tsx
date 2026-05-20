@@ -355,7 +355,15 @@ export default function ChatGeneratorPage() {
       addCarousel(carousel)
       setCurrentCarousel(carousel)
 
-      // Persist to DB (fire-and-forget)
+      // Persist to DB (fire-and-forget). Strip base64 images from the
+      // payload — N × 1-2MB blows past Vercel's 4.5MB body limit
+      // (HTTP 413, daí o GET 404 depois). Imagens ficam só na sessão
+      // atual até existir storage externa.
+      const slidesForPost = carousel.slides.map(s => ({
+        ...s,
+        imageUrl:     undefined,
+        imageHistory: undefined,
+      }))
       fetch('/api/carousels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -367,7 +375,7 @@ export default function ChatGeneratorPage() {
           format:            carousel.format,
           style:             JSON.stringify(carousel.style),
           status:            carousel.status,
-          slides:            carousel.slides,
+          slides:            slidesForPost,
           templateId:        carousel.templateId        ?? null,
           templateStructure: carousel.templateStructure ?? null,
         }),
