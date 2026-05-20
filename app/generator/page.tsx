@@ -150,10 +150,11 @@ export default function ChatGeneratorPage() {
 
   function pickTemplate(): PublishedTemplate | null {
     if (templateMode === 'manual') return selectedTemplate
-    const eligible = templates.filter(t => {
-      if (mode === 'creative') return t.mode === 'creative' || t.mode === 'both'
-      return t.mode === 'carousel' || t.mode === 'both'
-    })
+    // "Criativos em Massa" (interno: mode='carousel') agora produz N
+    // criativos independentes, cada um reusando um template de criativo.
+    // Por isso ambos os modos compartilham o mesmo pool de templates:
+    // qualquer template publicado serve.
+    const eligible = templates
     if (eligible.length === 0) return null
 
     // STRONG preference for templates WITH structure (the new visual
@@ -467,8 +468,8 @@ function ModeSelectView({ onSelect }: { onSelect: (m: CarouselMode) => void }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-3xl">
         {[
-          { mode: 'creative' as const, icon: Megaphone,  label: 'Criativo de Anúncio',  desc: 'Um post único e impactante' },
-          { mode: 'carousel' as const, icon: LayoutGrid, label: 'Carrossel Viral',     desc: 'Vários slides que prendem o leitor' },
+          { mode: 'creative' as const, icon: Megaphone,  label: 'Criativo Único',      desc: 'Um post impactante de uma vez só' },
+          { mode: 'carousel' as const, icon: LayoutGrid, label: 'Criativos em Massa', desc: 'Vários criativos gerados de uma vez (até 10)' },
         ].map((opt, i) => (
           <motion.button
             key={opt.mode}
@@ -528,7 +529,7 @@ function ChatView({
         </button>
         <div className="flex items-center gap-2 text-sm text-gray-400">
           {mode === 'carousel' ? <LayoutGrid size={14} /> : <Megaphone size={14} />}
-          <span>{mode === 'carousel' ? 'Carrossel' : 'Criativo'}</span>
+          <span>{mode === 'carousel' ? 'Criativos em Massa' : 'Criativo Único'}</span>
         </div>
       </div>
 
@@ -832,10 +833,8 @@ function TemplatePickerModal({
   onSelect: (t: PublishedTemplate) => void
   onClose: () => void
 }) {
-  const eligible = templates.filter(t => mode === 'creative'
-    ? (t.mode === 'creative' || t.mode === 'both')
-    : (t.mode === 'carousel' || t.mode === 'both')
-  )
+  // Same pool for both modes (creative + "criativos em massa")
+  const eligible = templates
   return (
     <motion.div
       initial={{ opacity: 0 }}

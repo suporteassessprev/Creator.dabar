@@ -10,7 +10,7 @@ import {
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard',     href: '/dashboard'  },
-  { icon: Plus,            label: 'Novo Carrossel', href: '/generator'  },
+  { icon: Plus,            label: 'Novo Criativo',  href: '/generator'  },
   { icon: ShoppingBag,     label: 'Marketplace',   href: '/marketplace'},
   { icon: CreditCard,      label: 'Plano',          href: '/billing'   },
   { icon: Settings,        label: 'Configurações',  href: '/settings'  },
