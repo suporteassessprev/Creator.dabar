@@ -92,9 +92,11 @@ export async function POST(req: NextRequest) {
     const audienceStr = targetAudience || 'empreendedores e criadores de conteúdo'
 
     if (mode === 'creative') {
+      // Sprint 2: pass userId so buildPrompt can inject few-shot
+      // examples of past edits if this user has 3+ significant ones.
       const prompt = await buildPrompt('creative_copy', {
         topic, tone: toneStr, audience: audienceStr,
-      })
+      }, { userId: session?.userId })
       const text     = await callGemini(prompt)
       const creative = extractJsonFromAi(text) as {
         headline: string; subtitle: string; cta: string; imagePrompt: string
@@ -115,7 +117,7 @@ export async function POST(req: NextRequest) {
     const prompt = await buildPrompt('carousel_copy', {
       topic, tone: toneStr, audience: audienceStr,
       slideCount: String(slideCount || 7),
-    })
+    }, { userId: session?.userId })
     const text   = await callGemini(prompt)
     const parsed = extractJsonFromAi(text) as { title: string; slides: unknown[] }
     validateCarousel(parsed)

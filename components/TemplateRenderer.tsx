@@ -507,7 +507,7 @@ function useStickyTextLayout(
 
     function reflow() {
       // Bail if the component unmounted between RAF callbacks.
-      if (disposed || !container.isConnected) return
+      if (disposed || !container || !container.isConnected) return
 
       // First pass: clear transforms so measurements reflect natural
       // positions. Each node is checked for isConnected — React may
