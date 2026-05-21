@@ -3,6 +3,7 @@
  * Gracefully falls back to hardcoded defaults if DB is unavailable.
  */
 import { prisma } from './db'
+import { getUserStyleExamples, renderStyleBlock } from './learning'
 
 export type PromptType =
   | 'creative_copy'
@@ -75,13 +76,39 @@ const REQUIRED_PLACEHOLDERS: Record<PromptType, string[]> = {
   carousel_image:  ['imagePrompt'],
 }
 
+/**
+ * Optional context that's only relevant for text-generation prompts.
+ * When `userId` is supplied, buildPrompt will look up the user's past
+ * edits and inject them as few-shot examples (Sprint 2 — Learning Loop).
+ */
+export interface BuildPromptContext {
+  userId?: string
+}
+
 /** One-shot helper: fetch + fill in one call. */
 export async function buildPrompt(
   type: PromptType,
-  vars: Record<string, string | number>
+  vars: Record<string, string | number>,
+  ctx?: BuildPromptContext,
 ): Promise<string> {
   const template = await getActivePrompt(type)
   const filled = fillTemplate(template, vars)
+
+  // Sprint 2: for TEXT-generation prompts, lookup the user's past
+  // edits and append them as few-shot demonstrations. Safe no-op when:
+  //  - ctx.userId not provided (e.g. admin "Testar prompt")
+  //  - user has < MIN_FOR_FEWSHOT (3) significant edits yet
+  //  - DB lookup fails
+  let styleBlock = ''
+  if (ctx?.userId && (type === 'creative_copy' || type === 'carousel_copy')) {
+    try {
+      const mode = type === 'creative_copy' ? 'creative' : 'carousel'
+      const examples = await getUserStyleExamples(prisma, ctx.userId, mode, 5)
+      styleBlock = renderStyleBlock(examples)
+    } catch (e: any) {
+      console.error('[learning] failed to load style examples:', e?.message ?? e)
+    }
+  }
 
   const required = REQUIRED_PLACEHOLDERS[type] ?? []
   const missing = required.filter(key => {
@@ -90,18 +117,22 @@ export async function buildPrompt(
     return valProvided && !hasPlaceholder
   })
 
-  if (missing.length === 0) return filled
+  const base = missing.length === 0
+    ? filled
+    : (() => {
+        const inputBlock = missing
+          .map(key => `${key.toUpperCase()}: ${vars[key]}`)
+          .concat(
+            Object.entries(vars)
+              .filter(([k, v]) => !missing.includes(k) && !template.includes(`{{${k}}}`) && String(v ?? '').trim() !== '')
+              .map(([k, v]) => `${k.toUpperCase()}: ${v}`)
+          )
+          .join('\n')
+        return `${filled}\n\n[INPUT DO USUÁRIO]\n${inputBlock}\n\nRetorne APENAS o JSON pedido, sem texto adicional.`
+      })()
 
-  // Safety net — admin's template forgot a placeholder; append the
-  // user input explicitly so Gemini doesn't end up waiting for it.
-  const inputBlock = missing
-    .map(key => `${key.toUpperCase()}: ${vars[key]}`)
-    .concat(
-      Object.entries(vars)
-        .filter(([k, v]) => !missing.includes(k) && !template.includes(`{{${k}}}`) && String(v ?? '').trim() !== '')
-        .map(([k, v]) => `${k.toUpperCase()}: ${v}`)
-    )
-    .join('\n')
-
-  return `${filled}\n\n[INPUT DO USUÁRIO]\n${inputBlock}\n\nRetorne APENAS o JSON pedido, sem texto adicional.`
+  // Splice the style block right before the JSON instruction so the
+  // model sees personalized examples LAST (recency primacy works in
+  // our favor here).
+  return styleBlock ? `${base}${styleBlock}` : base
 }

@@ -92,3 +92,102 @@ export interface ImageGenCapturePayload {
   niche?:      string | null
   regenCount?: number
 }
+
+/* ─── Sprint 2: read-side helpers ─────────────────────────────────── */
+
+/** A trimmed CreativeEdit row formatted as a few-shot prompt block. */
+export interface StyleExample {
+  aiHeadline:      string
+  userHeadline:    string
+  aiSubtitle:      string | null
+  userSubtitle:    string | null
+  aiCta:           string | null
+  userCta:         string | null
+}
+
+/**
+ * Picks the most recent SIGNIFICANT edits for a user/mode, ready to
+ * splice into a Gemini system prompt as few-shot demonstrations.
+ *
+ * "Significant" = headline OR subtitle diff >= 30%. Trivial typo edits
+ * are filtered out at the diffPct level — they'd add noise.
+ *
+ * Returns at most `limit` rows. If fewer than `MIN_FOR_FEWSHOT` rows
+ * exist, returns [] — the caller should NOT inject anything (avoids
+ * polluting the prompt with too-thin signal).
+ */
+export const MIN_FOR_FEWSHOT = 3
+
+export async function getUserStyleExamples(
+  prisma: { creativeEdit: { findMany: (args: any) => Promise<any[]> } },
+  userId: string,
+  mode: 'creative' | 'carousel',
+  limit = 5,
+): Promise<StyleExample[]> {
+  const rows = await prisma.creativeEdit.findMany({
+    where: {
+      userId,
+      mode,
+      OR: [
+        { headlineDiffPct: { gte: 0.3 } },
+        { subtitleDiffPct: { gte: 0.3 } },
+      ],
+      // Must have at least one before/after pair populated
+      NOT: { aiHeadline: null, userHeadline: null },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    select: {
+      aiHeadline: true, userHeadline: true,
+      aiSubtitle: true, userSubtitle: true,
+      aiCta:      true, userCta:      true,
+    },
+  })
+
+  if (rows.length < MIN_FOR_FEWSHOT) return []
+
+  return rows
+    .filter(r => r.aiHeadline && r.userHeadline)
+    .map(r => ({
+      aiHeadline:   r.aiHeadline!,
+      userHeadline: r.userHeadline!,
+      aiSubtitle:   r.aiSubtitle ?? null,
+      userSubtitle: r.userSubtitle ?? null,
+      aiCta:        r.aiCta ?? null,
+      userCta:      r.userCta ?? null,
+    }))
+}
+
+/**
+ * Formats StyleExample[] into a prompt block ready to append to the
+ * Gemini system prompt. Kept short (~200 tokens for 5 examples) to
+ * stay under context budget.
+ */
+export function renderStyleBlock(examples: StyleExample[]): string {
+  if (examples.length === 0) return ''
+  const lines = [
+    '',
+    '— ESTILO PESSOAL DO USUÁRIO —',
+    'Este usuário costuma transformar copy gerada da seguinte forma.',
+    'Aplique o MESMO padrão de transformação ao gerar o criativo abaixo.',
+    '',
+  ]
+  examples.forEach((ex, i) => {
+    lines.push(`Exemplo ${i + 1}:`)
+    lines.push(`  HEADLINE da IA:    "${ex.aiHeadline}"`)
+    lines.push(`  HEADLINE do user:  "${ex.userHeadline}"`)
+    if (ex.aiSubtitle && ex.userSubtitle && ex.aiSubtitle !== ex.userSubtitle) {
+      lines.push(`  SUBTITLE da IA:    "${ex.aiSubtitle}"`)
+      lines.push(`  SUBTITLE do user:  "${ex.userSubtitle}"`)
+    }
+    if (ex.aiCta && ex.userCta && ex.aiCta !== ex.userCta) {
+      lines.push(`  CTA da IA:    "${ex.aiCta}"`)
+      lines.push(`  CTA do user:  "${ex.userCta}"`)
+    }
+    lines.push('')
+  })
+  lines.push('Continue gerando NOVOS criativos, mas adotando o estilo,')
+  lines.push('tom e estrutura típicos das versões "do user" acima.')
+  lines.push('')
+  return lines.join('\n')
+}
